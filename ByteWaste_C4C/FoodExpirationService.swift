@@ -9,14 +9,25 @@ import Foundation
 
 // MARK: - Configuration (internal to this file)
 fileprivate struct APIConfig {
+    // Prefer Scheme Environment Variables; fall back to Info.plist if provided
+    private static func value(for key: String) -> String {
+        if let env = ProcessInfo.processInfo.environment[key], !env.isEmpty {
+            return env
+        }
+        if let plist = Bundle.main.object(forInfoDictionaryKey: key) as? String, !plist.isEmpty {
+            return plist
+        }
+        return ""
+    }
+
     // Edamam Food Database API
-    static let EDAMAM_BASE_URL = "https://api.edamam.com"
-    static let FOOD_APP_ID = "8ed2ee10"
-    static let FOOD_APP_KEY = "1d7a4ef39b5d91968f1104e81b1848c0"
-    
+    static var EDAMAM_BASE_URL: String { value(for: "EDAMAM_BASE_URL") }
+    static var FOOD_APP_ID: String { value(for: "FOOD_APP_ID") }
+    static var FOOD_APP_KEY: String { value(for: "FOOD_APP_KEY") }
+
     // Navigator AI API
-    static let NAVIGATOR_API_ENDPOINT = "https://api.ai.it.ufl.edu/v1"
-    static let NAVIGATOR_API_KEY = "sk-2blAQakgnP15ORa_s0z1hw"
+    static var NAVIGATOR_API_ENDPOINT: String { value(for: "NAVIGATOR_API_ENDPOINT") }
+    static var NAVIGATOR_API_KEY: String { value(for: "NAVIGATOR_API_KEY") }
 }
 
 // MARK: - Models
@@ -144,6 +155,13 @@ public class FoodExpirationService {
     
     /// Fetch food data from Edamam API using barcode
     private func fetchFoodData(barcode: String) async throws -> EdamamFood {
+        // Validate configuration from environment/schema
+        guard !APIConfig.EDAMAM_BASE_URL.isEmpty,
+              !APIConfig.FOOD_APP_ID.isEmpty,
+              !APIConfig.FOOD_APP_KEY.isEmpty else {
+            throw ServiceError.apiError("Missing Edamam configuration. Ensure EDAMAM_BASE_URL, FOOD_APP_ID, and FOOD_APP_KEY are set in the Scheme's Environment Variables or Info.plist.")
+        }
+        
         var components = URLComponents(string: "\(APIConfig.EDAMAM_BASE_URL)/api/food-database/v2/parser")
         
         components?.queryItems = [
@@ -175,6 +193,12 @@ public class FoodExpirationService {
     
     /// Estimate shelf life using Navigator AI
     private func estimateShelfLife(food: EdamamFood) async throws -> ShelfLifeAIResponse {
+        // Validate Navigator configuration
+        guard !APIConfig.NAVIGATOR_API_ENDPOINT.isEmpty,
+              !APIConfig.NAVIGATOR_API_KEY.isEmpty else {
+            throw ServiceError.apiError("Missing Navigator AI configuration. Ensure NAVIGATOR_API_ENDPOINT and NAVIGATOR_API_KEY are set in the Scheme's Environment Variables or Info.plist.")
+        }
+        
         guard let url = URL(string: "\(APIConfig.NAVIGATOR_API_ENDPOINT)/chat/completions") else {
             throw ServiceError.invalidURL
         }
@@ -342,3 +366,4 @@ public enum ServiceError: LocalizedError {
         }
     }
 }
+
