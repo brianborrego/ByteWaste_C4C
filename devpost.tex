@@ -1,0 +1,78 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{parskip}
+
+\title{\textbf{UPantry}}
+\author{Code4Community Hackathon}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section*{Inspiration}
+
+Roughly 30--40\% of food produced in the U.S.\ ends up wasted, much of it from households that simply lose track of what's in their kitchen. We wanted to build something that makes it effortless to know what you have, when it expires, and what you can cook with it---turning food waste prevention into a habit rather than a chore.
+
+\section*{What It Does}
+
+UPantry is an iOS app that helps users manage their food inventory and reduce waste through three core features:
+
+\begin{itemize}[nosep]
+  \item \textbf{Smart food tracking} --- add items via barcode scanning, photo recognition, or manual search. Each item gets AI-estimated expiration dates for fridge, freezer, and shelf storage.
+  \item \textbf{Intelligent pantry management} --- organize items across three storage sections. Moving an item between locations automatically recalculates its expiration date based on elapsed time and storage type.
+  \item \textbf{Recipe suggestions \& shopping lists} --- recipes are generated prioritizing ingredients that are about to expire. Missing ingredients can be added directly to an integrated shopping list.
+\end{itemize}
+
+A sustainability tracker rewards users for using food before it spoils, growing a virtual tree that fills into a forest over time.
+
+\section*{How We Built It}
+
+\begin{itemize}[nosep]
+  \item \textbf{Frontend:} Swift and SwiftUI with an MVVM architecture targeting iOS 17+.
+  \item \textbf{Backend:} Supabase for authentication (email/password and Apple Sign-In), database storage, and per-user data isolation.
+  \item \textbf{APIs:} Edamam Food Database for barcode lookups and food search, Edamam Recipe Search for recipe generation, and a school-hosted AI endpoint for shelf-life estimation.
+  \item \textbf{On-device ML:} Apple Vision framework for real-time food photo recognition.
+  \item \textbf{Camera:} AVFoundation for live barcode scanning.
+\end{itemize}
+
+\section*{Challenges We Ran Into}
+
+\begin{itemize}[nosep]
+  \item \textbf{Merge conflicts} --- with 30+ merges across multiple branches, coordinating parallel work on views, view models, and services led to frequent and complex conflicts.
+  \item \textbf{UI bugs} --- white-on-white text fields, tab bars covering scrollable content, and misaligned multi-line labels required careful per-view debugging.
+  \item \textbf{Package dependency issues} --- integrating the Supabase Swift SDK alongside other SPM packages caused version resolution conflicts that blocked builds.
+  \item \textbf{Expiration recalculation logic} --- correctly handling the three-way storage transfer rules (especially freezer edge cases) without losing elapsed-time context was tricky to get right.
+  \item \textbf{Per-user data isolation} --- progress and sustainability data was originally stored in global UserDefaults keys, so switching accounts on the same device shared state across users.
+\end{itemize}
+
+\section*{Accomplishments That We're Proud Of}
+
+\begin{itemize}[nosep]
+  \item Three fully functional input methods (barcode, photo, manual) all feeding into a unified pantry system.
+  \item A recipe matching algorithm that genuinely prioritizes expiring ingredients and scores results meaningfully.
+  \item The sustainability tree that grows with responsible food use and spawns a forest of pines---a small but satisfying gamification loop.
+  \item Shipping a polished, end-to-end flow from scanning an item to cooking a recipe to checking off a shopping list.
+\end{itemize}
+
+\section*{What We Learned}
+
+\begin{itemize}[nosep]
+  \item Scoping features early matters---we avoided over-engineering by sticking to a clear spec.
+  \item SwiftUI's declarative style is powerful but unforgiving when state management spans multiple views and storage layers.
+  \item Coordinating a team on a single Xcode project requires disciplined branching; \texttt{.pbxproj} conflicts are painful.
+  \item Real-world APIs return messy data---defensive parsing and sensible fallback defaults are essential.
+\end{itemize}
+
+\section*{What's Next for UPantry}
+
+\begin{itemize}[nosep]
+  \item Migrate sustainability and tree progress to Supabase so data syncs across devices.
+  \item Add push notifications for items approaching expiration.
+  \item Expand recipe suggestions with dietary filters and meal planning.
+  \item Household sharing---let multiple users contribute to and draw from the same pantry.
+  \item Launch on the App Store and gather real user feedback to refine the experience.
+\end{itemize}
+
+\end{document}
