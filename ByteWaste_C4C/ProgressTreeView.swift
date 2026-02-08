@@ -98,14 +98,20 @@ struct TreeViewRepresentable: UIViewRepresentable {
 }
 
 struct ProgressTreeView: View {
-    @State private var level: Int = UserDefaults.standard.integer(forKey: "treeLevel")
-    @State private var sustainabilityPoints: Int = UserDefaults.standard.integer(forKey: "sustainabilityPoints")
+    @State private var level: Int = 0
+    @State private var sustainabilityPoints: Int = 0
     @State private var shouldAnimate = false
     @State private var forestPines: [ForestPine] = []
 
+    // User-scoped UserDefaults key
+    private static func userKey(_ key: String) -> String {
+        let userId = SupabaseService.shared.currentUserId ?? "unknown"
+        return "\(userId)_\(key)"
+    }
+
     // Load forest pines from UserDefaults
     private func loadForestPines() -> [ForestPine] {
-        guard let data = UserDefaults.standard.data(forKey: "forestPines"),
+        guard let data = UserDefaults.standard.data(forKey: Self.userKey("forestPines")),
               let pines = try? JSONDecoder().decode([ForestPine].self, from: data) else {
             return []
         }
@@ -115,7 +121,7 @@ struct ProgressTreeView: View {
     // Save forest pines to UserDefaults
     private func saveForestPines() {
         if let encoded = try? JSONEncoder().encode(forestPines) {
-            UserDefaults.standard.set(encoded, forKey: "forestPines")
+            UserDefaults.standard.set(encoded, forKey: Self.userKey("forestPines"))
         }
     }
 
@@ -263,10 +269,10 @@ struct ProgressTreeView: View {
                                     }
                                 }
 
-                                UserDefaults.standard.set(sustainabilityPoints, forKey: "sustainabilityPoints")
+                                UserDefaults.standard.set(sustainabilityPoints, forKey: Self.userKey("sustainabilityPoints"))
                                 // Update level based on points
                                 level = sustainabilityPoints / 10
-                                UserDefaults.standard.set(level, forKey: "treeLevel")
+                                UserDefaults.standard.set(level, forKey: Self.userKey("treeLevel"))
                             } label: {
                                 Label("Add Points", systemImage: "plus.circle.fill")
                                     .font(.headline)
@@ -282,11 +288,11 @@ struct ProgressTreeView: View {
                             Button {
                                 sustainabilityPoints = 0
                                 level = 0
-                                UserDefaults.standard.set(0, forKey: "sustainabilityPoints")
-                                UserDefaults.standard.set(0, forKey: "treeLevel")
+                                UserDefaults.standard.set(0, forKey: Self.userKey("sustainabilityPoints"))
+                                UserDefaults.standard.set(0, forKey: Self.userKey("treeLevel"))
                                 // Clear any stored forest pines
-                                UserDefaults.standard.removeObject(forKey: "forestPines")
-                                UserDefaults.standard.removeObject(forKey: "forestTrees")
+                                UserDefaults.standard.removeObject(forKey: Self.userKey("forestPines"))
+                                UserDefaults.standard.removeObject(forKey: Self.userKey("forestTrees"))
                                 forestPines = []
                             } label: {
                                 Label("Reset", systemImage: "arrow.counterclockwise")
@@ -311,16 +317,16 @@ struct ProgressTreeView: View {
                 forestPines = loadForestPines()
                 print("🌲 Loaded \(forestPines.count) pines from forest")
 
-                // Load sustainability points
-                sustainabilityPoints = UserDefaults.standard.integer(forKey: "sustainabilityPoints")
+                // Load sustainability points for current user
+                sustainabilityPoints = UserDefaults.standard.integer(forKey: Self.userKey("sustainabilityPoints"))
 
                 // Ensure points never go below 0
                 sustainabilityPoints = max(0, sustainabilityPoints)
 
                 level = sustainabilityPoints / 10
                 // Sync values back to UserDefaults
-                UserDefaults.standard.set(sustainabilityPoints, forKey: "sustainabilityPoints")
-                UserDefaults.standard.set(level, forKey: "treeLevel")
+                UserDefaults.standard.set(sustainabilityPoints, forKey: Self.userKey("sustainabilityPoints"))
+                UserDefaults.standard.set(level, forKey: Self.userKey("treeLevel"))
 
                 shouldAnimate = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {

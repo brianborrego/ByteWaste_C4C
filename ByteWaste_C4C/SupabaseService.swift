@@ -19,6 +19,11 @@ class SupabaseService {
         )
     }
 
+    // Synchronous user ID for keying local data per account
+    var currentUserId: String? {
+        client.auth.currentSession?.user.id.uuidString
+    }
+
     // MARK: - Pantry Items CRUD
 
     func fetchItems() async throws -> [PantryItem] {

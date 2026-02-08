@@ -188,6 +188,12 @@ class PantryViewModel: ObservableObject {
         }
     }
 
+    // User-scoped UserDefaults key
+    private func userKey(_ key: String) -> String {
+        let userId = supabase.currentUserId ?? "unknown"
+        return "\(userId)_\(key)"
+    }
+
     // MARK: - Load from Supabase
 
     func loadItems() async {
@@ -593,7 +599,7 @@ class PantryViewModel: ObservableObject {
         print("📊 Item disposed: \(item.name) - Method: \(method.rawValue)")
 
         // Award sustainability points based on disposal method
-        let currentPoints = UserDefaults.standard.integer(forKey: "sustainabilityPoints")
+        let currentPoints = UserDefaults.standard.integer(forKey: userKey("sustainabilityPoints"))
         var pointsChange = 0
 
         switch method {
@@ -621,11 +627,11 @@ class PantryViewModel: ObservableObject {
             print("🌲 Added \(pinesToAdd) pine(s) to forest! Points wrapped to \(newPoints)")
         }
 
-        UserDefaults.standard.set(newPoints, forKey: "sustainabilityPoints")
+        UserDefaults.standard.set(newPoints, forKey: userKey("sustainabilityPoints"))
 
         // Update tree level based on points (level = points / 10)
         let newLevel = newPoints / 10
-        UserDefaults.standard.set(newLevel, forKey: "treeLevel")
+        UserDefaults.standard.set(newLevel, forKey: userKey("treeLevel"))
 
         print("🌱 Sustainability points: \(currentPoints) → \(newPoints) (\(pointsChange >= 0 ? "+" : "")\(pointsChange)) | Level: \(newLevel)")
 
@@ -653,7 +659,8 @@ class PantryViewModel: ObservableObject {
 
     // Helper to add pines to forest
     private func addPinesToForest(count: Int) {
-        guard let data = UserDefaults.standard.data(forKey: "forestPines"),
+        let pinesKey = userKey("forestPines")
+        guard let data = UserDefaults.standard.data(forKey: pinesKey),
               var forestPines = try? JSONDecoder().decode([ForestPine].self, from: data) else {
             // No existing forest, create new one
             var newForest: [ForestPine] = []
@@ -661,7 +668,7 @@ class PantryViewModel: ObservableObject {
                 newForest.append(ForestPine())
             }
             if let encoded = try? JSONEncoder().encode(newForest) {
-                UserDefaults.standard.set(encoded, forKey: "forestPines")
+                UserDefaults.standard.set(encoded, forKey: pinesKey)
             }
             return
         }
@@ -672,7 +679,7 @@ class PantryViewModel: ObservableObject {
         }
 
         if let encoded = try? JSONEncoder().encode(forestPines) {
-            UserDefaults.standard.set(encoded, forKey: "forestPines")
+            UserDefaults.standard.set(encoded, forKey: pinesKey)
         }
     }
 
