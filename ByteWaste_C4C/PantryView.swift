@@ -83,6 +83,15 @@ struct PantryView: View {
                                         }
                                         .buttonStyle(PlainButtonStyle())
                                         .disabled(isEditMode)
+                                        .simultaneousGesture(
+                                            LongPressGesture(minimumDuration: 2.0)
+                                                .onEnded { _ in
+                                                    print("🔴 Long press detected!")
+                                                    withAnimation(.spring()) {
+                                                        isEditMode = true
+                                                    }
+                                                }
+                                        )
 
                                         // Delete button overlay when in edit mode
                                         if isEditMode {
@@ -102,12 +111,6 @@ struct PantryView: View {
                                             }
                                             .offset(x: 8, y: 8)
                                             .transition(.scale)
-                                        }
-                                    }
-                                    .contentShape(Rectangle())
-                                    .onLongPressGesture(minimumDuration: 2.0) {
-                                        withAnimation(.spring()) {
-                                            isEditMode = true
                                         }
                                     }
                                 }
