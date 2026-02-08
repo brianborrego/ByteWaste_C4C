@@ -79,4 +79,47 @@ class SupabaseService {
             .execute()
         print("✅ Successfully updated item: \(item.name)")
     }
+
+    // MARK: - Shopping List CRUD
+
+    func fetchShoppingListItems() async throws -> [ShoppingListItem] {
+        print("🛒 Fetching shopping list items from Supabase")
+        let result: [ShoppingListItem] = try await client
+            .from("shopping_list_items")
+            .select()
+            .order("date_added", ascending: false)
+            .execute()
+            .value
+        print("✅ Fetched \(result.count) shopping list items")
+        return result
+    }
+
+    func insertShoppingListItem(_ item: ShoppingListItem) async throws {
+        print("➕ Inserting shopping list item: \(item.name)")
+        try await client
+            .from("shopping_list_items")
+            .insert(item)
+            .execute()
+        print("✅ Successfully inserted shopping list item: \(item.name)")
+    }
+
+    func updateShoppingListItem(_ item: ShoppingListItem) async throws {
+        print("🔄 Updating shopping list item: \(item.name)")
+        try await client
+            .from("shopping_list_items")
+            .update(item)
+            .eq("id", value: item.id.uuidString)
+            .execute()
+        print("✅ Successfully updated shopping list item: \(item.name)")
+    }
+
+    func deleteShoppingListItem(id: UUID) async throws {
+        print("🗑️ Deleting shopping list item: \(id)")
+        try await client
+            .from("shopping_list_items")
+            .delete()
+            .eq("id", value: id.uuidString)
+            .execute()
+        print("✅ Successfully deleted shopping list item: \(id)")
+    }
 }
