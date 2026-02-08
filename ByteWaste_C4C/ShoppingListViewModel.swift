@@ -5,6 +5,7 @@
 
 import SwiftUI
 import Combine
+import Supabase
 
 class ShoppingListViewModel: ObservableObject {
     @Published var items: [ShoppingListItem] = []
@@ -13,6 +14,14 @@ class ShoppingListViewModel: ObservableObject {
     @Published var showingAddSheet = false
 
     private let supabase = SupabaseService.shared
+
+    // MARK: - Helper to get current user ID
+
+    private var currentUserId: UUID? {
+        get async {
+            try? await supabase.client.auth.session.user.id
+        }
+    }
 
     // MARK: - Load from Supabase
 
@@ -42,6 +51,9 @@ class ShoppingListViewModel: ObservableObject {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
 
         Task {
+            // Get current user ID
+            let userId = await currentUserId
+
             // Fetch image URL from Edamam
             let imageURL = await FoodImageService.shared.fetchFoodImageURL(for: trimmedName)
 
@@ -49,7 +61,8 @@ class ShoppingListViewModel: ObservableObject {
                 name: trimmedName,
                 sourceRecipeId: sourceRecipeId,
                 sourceRecipeName: sourceRecipeName,
-                imageURL: imageURL
+                imageURL: imageURL,
+                userId: userId
             )
 
             // Add to UI
