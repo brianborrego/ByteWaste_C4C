@@ -17,57 +17,9 @@ struct PantryView: View {
             ZStack {
                 Color.appCream.ignoresSafeArea()
 
-                if viewModel.isLoading {
-                    ProgressView("Loading pantry...")
-                } else {
-                    VStack(spacing: 0) {
-                        StorageSectionView(
-                            title: "Pantry",
-                            items: itemsFor(.shelf),
-                            isEditMode: isEditMode,
-                            viewModel: viewModel,
-                            onLongPress: { withAnimation(.spring()) { isEditMode = true } }
-                        )
-                        .frame(maxHeight: .infinity)
-
-                        StorageSectionView(
-                            title: "Fridge",
-                            items: itemsFor(.fridge),
-                            isEditMode: isEditMode,
-                            viewModel: viewModel,
-                            onLongPress: { withAnimation(.spring()) { isEditMode = true } }
-                        )
-                        .frame(maxHeight: .infinity)
-
-                        StorageSectionView(
-                            title: "Freezer",
-                            items: itemsFor(.freezer),
-                            isEditMode: isEditMode,
-                            viewModel: viewModel,
-                            onLongPress: { withAnimation(.spring()) { isEditMode = true } }
-                        )
-                        .frame(maxHeight: .infinity)
-                    }
-                    .padding(.top, 8)
-                    .padding(.bottom, 80)
-                }
-
-                // Floating Done button for edit mode
-                if isEditMode {
-                    VStack {
-                        HStack {
-                            Spacer()
                 VStack(spacing: 0) {
-                    // Custom gradient title with profile button and Done button
+                    // Profile button and Done button bar (no title)
                     HStack {
-                        Text("Pantry")
-                            .font(.system(size: 36, weight: .bold))
-                            .foregroundStyle(.linearGradient(
-                                colors: [.appGradientTop, .appGradientBottom],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            ))
-
                         Spacer()
 
                         if isEditMode {
@@ -92,15 +44,57 @@ struct PantryView: View {
                                     .foregroundColor(.appPrimaryGreen)
                             }
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 16)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 8)
+
+                    if viewModel.isLoading {
                         Spacer()
+                        ProgressView("Loading pantry...")
+                        Spacer()
+                    } else {
+                        GeometryReader { geometry in
+                            VStack(spacing: 8) {
+                                StorageSectionView(
+                                    title: "Pantry",
+                                    items: itemsFor(.shelf),
+                                    isEditMode: isEditMode,
+                                    viewModel: viewModel,
+                                    onLongPress: { withAnimation(.spring()) { isEditMode = true } }
+                                )
+                                .frame(height: (geometry.size.height - 16) / 3)
+
+                                StorageSectionView(
+                                    title: "Fridge",
+                                    items: itemsFor(.fridge),
+                                    isEditMode: isEditMode,
+                                    viewModel: viewModel,
+                                    onLongPress: { withAnimation(.spring()) { isEditMode = true } }
+                                )
+                                .frame(height: (geometry.size.height - 16) / 3)
+
+                                StorageSectionView(
+                                    title: "Freezer",
+                                    items: itemsFor(.freezer),
+                                    isEditMode: isEditMode,
+                                    viewModel: viewModel,
+                                    onLongPress: { withAnimation(.spring()) { isEditMode = true } }
+                                )
+                                .frame(height: (geometry.size.height - 16) / 3)
+                            }
+                        }
+                        .padding(.bottom, 80)
                     }
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
             .task {
                 await viewModel.loadItems()
+            }
+            .sheet(isPresented: $showingProfileSheet) {
+                ProfileView()
+                    .environmentObject(authViewModel)
             }
         }
     }
@@ -115,7 +109,7 @@ private struct StorageSectionView: View {
     let onLongPress: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.system(size: 36, weight: .bold))
                 .foregroundStyle(.linearGradient(
@@ -129,8 +123,7 @@ private struct StorageSectionView: View {
                 Text("\(title) is empty!")
                     .font(.subheadline)
                     .foregroundColor(.appIconGray)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
@@ -148,47 +141,35 @@ private struct StorageSectionView: View {
                                         }
                                 )
 
-                                        // Delete button overlay when in edit mode
-                                        if isEditMode {
-                                            Button {
-                                                withAnimation {
-                                                    viewModel.disposeItem(item, method: .thrownAway)
-                                                }
-                                            } label: {
-                                                ZStack {
-                                                    Circle()
-                                                        .fill(Color.red)
-                                                        .frame(width: 30, height: 30)
-                                                    Image(systemName: "minus")
-                                                        .font(.system(size: 16, weight: .bold))
-                                                        .foregroundColor(.white)
-                                                }
-                                            }
-                                            .offset(x: 8, y: 8)
-                                            .transition(.scale)
+                                // Delete button overlay when in edit mode
+                                if isEditMode {
+                                    Button {
+                                        withAnimation {
+                                            viewModel.disposeItem(item, method: .thrownAway)
+                                        }
+                                    } label: {
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color.red)
+                                                .frame(width: 30, height: 30)
+                                            Image(systemName: "minus")
+                                                .font(.system(size: 16, weight: .bold))
+                                                .foregroundColor(.white)
                                         }
                                     }
+                                    .offset(x: 8, y: 8)
+                                    .transition(.scale)
                                 }
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 80) // Extra padding for tab bar
-                        }
-                        .refreshable {
-                            await viewModel.refreshItems()
                         }
                     }
+                    .padding(.horizontal, 16)
                 }
-            }
-            .navigationBarHidden(true)
-            .task {
-                await viewModel.loadItems()
-            }
-            .sheet(isPresented: $showingProfileSheet) {
-                ProfileView()
-                    .environmentObject(authViewModel)
+                .frame(maxHeight: .infinity)
             }
         }
-    
+    }
+}
 
 // MARK: - Pantry Item Square Card
 private struct PantryItemSquareCard: View {
@@ -521,7 +502,7 @@ struct DisposalOptionButton: View {
     let color: Color
     let isSelected: Bool
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
@@ -531,20 +512,20 @@ struct DisposalOptionButton: View {
                     .frame(width: 40, height: 40)
                     .background(color)
                     .cornerRadius(10)
-                
+
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.black)
-                    
+
                     Text(subtitle)
                         .font(.system(size: 13, weight: .regular))
                         .foregroundColor(.appIconGray)
                         .lineLimit(2)
                 }
-                
+
                 Spacer()
-                
+
                 if isSelected {
                     Image(systemName: "checkmark")
                         .font(.system(size: 14, weight: .bold))
@@ -815,4 +796,5 @@ private struct ManualEntryBarcodeScannerView: View {
 
 #Preview {
     PantryView(viewModel: PantryViewModel())
+        .environmentObject(AuthViewModel())
 }

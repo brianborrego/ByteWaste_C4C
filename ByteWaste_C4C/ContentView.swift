@@ -13,20 +13,19 @@ struct ContentView: View {
     @State private var selectedTab: AppTab = .pantry
     @State private var showAddMenu = false
     @State private var triggerShoppingAdd = false
-    
+
     var body: some View {
         ZStack {
             // Persistent cream background (prevents flashing)
             Color.appCream.ignoresSafeArea()
-            VStack(spacing: 0 ){
-            VStack(spacing: 0 ){
+
+            VStack(spacing: 0) {
                 // Tab content with smoother transition
                 ZStack {
                     if selectedTab == .pantry {
                         PantryView(viewModel: pantryViewModel)
                             .transition(.opacity)
                     } else if selectedTab == .recipes {
-                        RecipeListView(viewModel: recipeViewModel)
                         RecipeListView(viewModel: recipeViewModel)
                             .transition(.opacity)
                     } else if selectedTab == .shopping {
@@ -41,6 +40,7 @@ struct ContentView: View {
 
                 Spacer(minLength: 0)
             }
+
             // Dim background when add menu is open (MUST be before tab bar in Z-order)
             if showAddMenu {
                 Color.black.opacity(0.3)
@@ -53,6 +53,7 @@ struct ContentView: View {
                     .transition(.opacity)
                     .zIndex(1)
             }
+
             // Custom tab bar overlay (MUST be on top with higher zIndex)
             VStack {
                 Spacer()
