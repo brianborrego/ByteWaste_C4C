@@ -12,6 +12,7 @@ import Combine
 class AuthViewModel: ObservableObject {
     @Published var session: Supabase.Session?
     @Published var isLoading = false
+    @Published var isCheckingSession = true
     @Published var errorMessage: String?
 
     private let supabase = SupabaseService.shared.client
@@ -35,6 +36,8 @@ class AuthViewModel: ObservableObject {
 
     @MainActor
     func checkSession() async {
+        let startTime = Date()
+
         do {
             session = try await supabase.auth.session
             print("✅ Session restored: \(session?.user.email ?? "unknown")")
@@ -42,6 +45,16 @@ class AuthViewModel: ObservableObject {
             print("ℹ️ No existing session")
             session = nil
         }
+
+        // Ensure minimum display time (prevents flash)
+        let elapsed = Date().timeIntervalSince(startTime)
+        let minDuration = 5.5
+
+        if elapsed < minDuration {
+            try? await Task.sleep(nanoseconds: UInt64((minDuration - elapsed) * 1_000_000_000))
+        }
+
+        isCheckingSession = false
     }
 
     // MARK: - Email/Password Auth
@@ -50,6 +63,8 @@ class AuthViewModel: ObservableObject {
     func signUp(email: String, password: String) async {
         isLoading = true
         errorMessage = nil
+
+        let startTime = Date()
 
         do {
             let response = try await supabase.auth.signUp(
@@ -63,6 +78,13 @@ class AuthViewModel: ObservableObject {
             print("❌ Sign up error: \(error)")
         }
 
+        // Ensure minimum loading display
+        let elapsed = Date().timeIntervalSince(startTime)
+        let minDuration = 5.5
+        if elapsed < minDuration {
+            try? await Task.sleep(nanoseconds: UInt64((minDuration - elapsed) * 1_000_000_000))
+        }
+
         isLoading = false
     }
 
@@ -70,6 +92,8 @@ class AuthViewModel: ObservableObject {
     func signIn(email: String, password: String) async {
         isLoading = true
         errorMessage = nil
+
+        let startTime = Date()
 
         do {
             let session = try await supabase.auth.signIn(
@@ -83,6 +107,13 @@ class AuthViewModel: ObservableObject {
             print("❌ Sign in error: \(error)")
         }
 
+        // Ensure minimum loading display
+        let elapsed = Date().timeIntervalSince(startTime)
+        let minDuration = 5.5
+        if elapsed < minDuration {
+            try? await Task.sleep(nanoseconds: UInt64((minDuration - elapsed) * 1_000_000_000))
+        }
+
         isLoading = false
     }
 
@@ -92,6 +123,8 @@ class AuthViewModel: ObservableObject {
     func signInWithApple(idToken: String, nonce: String) async {
         isLoading = true
         errorMessage = nil
+
+        let startTime = Date()
 
         do {
             let session = try await supabase.auth.signInWithIdToken(
@@ -106,6 +139,13 @@ class AuthViewModel: ObservableObject {
         } catch {
             errorMessage = "Apple Sign-In failed: \(error.localizedDescription)"
             print("❌ Apple Sign-In error: \(error)")
+        }
+
+        // Ensure minimum loading display
+        let elapsed = Date().timeIntervalSince(startTime)
+        let minDuration = 5.5
+        if elapsed < minDuration {
+            try? await Task.sleep(nanoseconds: UInt64((minDuration - elapsed) * 1_000_000_000))
         }
 
         isLoading = false

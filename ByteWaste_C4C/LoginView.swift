@@ -154,6 +154,9 @@ struct LoginView: View {
                 }
             }
         }
+        .fullScreenCover(isPresented: $authViewModel.isLoading) {
+            TreeLoadingView()
+        }
     }
 
     // MARK: - Apple Sign-In Handler

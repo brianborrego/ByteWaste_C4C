@@ -14,7 +14,9 @@ struct ByteWaste_C4CApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if authViewModel.isAuthenticated {
+                if authViewModel.isCheckingSession {
+                    TreeLoadingView()
+                } else if authViewModel.isAuthenticated {
                     ContentView()
                         .environmentObject(authViewModel)
                 } else {
