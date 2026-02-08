@@ -529,6 +529,7 @@ private struct PantryItemDetailView: View {
                     Spacer()
                 }
                 .padding(.top)
+                .padding(.bottom, 100)
             }
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -787,6 +788,7 @@ struct AddPantryItemView: View {
                                         .padding(.leading, 4)
                                 }
                                 TextField("", text: $name)
+                                    .foregroundColor(.black)
                                     .textContentType(.none)
                             }
                             .padding()
@@ -806,6 +808,7 @@ struct AddPantryItemView: View {
 
                             ZStack(alignment: .topLeading) {
                                 TextEditor(text: $additionalContext)
+                                    .foregroundColor(.black)
                                     .frame(minHeight: 80)
                                     .scrollContentBackground(.hidden)
 
@@ -840,6 +843,7 @@ struct AddPantryItemView: View {
                                             .padding(.leading, 4)
                                     }
                                     TextField("", text: $barcode)
+                                        .foregroundColor(.black)
                                         .keyboardType(.numberPad)
                                 }
 
