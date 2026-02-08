@@ -25,7 +25,7 @@ struct Config {
     static let navigatorAPIKey = "sk-AUydy3z6VlN-xwA0cILqRw"
 
     // Remove-bg api token
-    // static let REPLICATE_API_TOKEN = "r8_a7G3ANUraYCX8cOXR8miXMUjM5cWVPn3scSfS"
+    // static let REPLICATE_API_TOKEN = ""
     static let REMOVE_BG = false
 
     // MARK: - App Color Palette
