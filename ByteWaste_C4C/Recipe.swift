@@ -19,6 +19,7 @@ struct Recipe: Identifiable, Codable {
     var pantryItemsUsed: [String]
     var generatedFrom: [String]
     var createdAt: Date?
+    var userId: UUID?
 
     enum CodingKeys: String, CodingKey {
         case id, label, image, yield
@@ -31,6 +32,7 @@ struct Recipe: Identifiable, Codable {
         case pantryItemsUsed = "pantry_items_used"
         case generatedFrom = "generated_from"
         case createdAt = "created_at"
+        case userId = "user_id"
     }
 
     // Custom decoder to handle database NULLs for non-optional arrays
@@ -50,6 +52,7 @@ struct Recipe: Identifiable, Codable {
         pantryItemsUsed = (try? container.decode([String].self, forKey: .pantryItemsUsed)) ?? []
         generatedFrom = (try? container.decode([String].self, forKey: .generatedFrom)) ?? []
         createdAt = try? container.decode(Date.self, forKey: .createdAt)
+        userId = try? container.decode(UUID.self, forKey: .userId)
     }
 
     init(
@@ -65,7 +68,8 @@ struct Recipe: Identifiable, Codable {
         mealType: [String]? = nil,
         pantryItemsUsed: [String],
         generatedFrom: [String],
-        createdAt: Date? = nil
+        createdAt: Date? = nil,
+        userId: UUID? = nil
     ) {
         self.id = id
         self.label = label
@@ -80,6 +84,7 @@ struct Recipe: Identifiable, Codable {
         self.pantryItemsUsed = pantryItemsUsed
         self.generatedFrom = generatedFrom
         self.createdAt = createdAt
+        self.userId = userId
     }
 
     // Computed properties for UI and filtering

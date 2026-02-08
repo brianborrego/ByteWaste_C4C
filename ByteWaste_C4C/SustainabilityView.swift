@@ -14,11 +14,11 @@ struct SustainabilityView: View {
 
             VStack(spacing: 20) {
                 Image(systemName: "leaf.fill")
-                    .font(.system(size: 64))
+                    .font(.system(size: 80))
                     .foregroundColor(.appPrimaryGreen)
 
                 Text("Sustainability")
-                    .font(.system(size: 32, weight: .bold))
+                    .font(.system(size: 36, weight: .bold))
                     .foregroundStyle(.linearGradient(
                         colors: [.appGradientTop, .appGradientBottom],
                         startPoint: .top,
@@ -27,7 +27,7 @@ struct SustainabilityView: View {
 
                 Text("Coming Soon")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.appIconGray)
             }
         }
     }

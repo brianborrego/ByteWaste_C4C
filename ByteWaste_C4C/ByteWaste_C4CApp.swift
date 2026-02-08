@@ -9,9 +9,18 @@ import SwiftUI
 
 @main
 struct ByteWaste_C4CApp: App {
+    @StateObject private var authViewModel = AuthViewModel()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            Group {
+                if authViewModel.isAuthenticated {
+                    ContentView()
+                        .environmentObject(authViewModel)
+                } else {
+                    LoginView(authViewModel: authViewModel)
+                }
+            }
         }
     }
 }
