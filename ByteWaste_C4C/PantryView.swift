@@ -2,7 +2,9 @@ import SwiftUI
 
 struct PantryView: View {
     @ObservedObject var viewModel: PantryViewModel
+    @EnvironmentObject var authViewModel: AuthViewModel
     @State private var isEditMode = false
+    @State private var showingProfileSheet = false
 
     var body: some View {
         NavigationStack {
@@ -11,7 +13,7 @@ struct PantryView: View {
                 Color.appCream.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    // Custom gradient title with Done button
+                    // Custom gradient title with profile button and Done button
                     HStack {
                         Text("Pantry")
                             .font(.system(size: 36, weight: .bold))
@@ -35,6 +37,15 @@ struct PantryView: View {
                             .padding(.vertical, 8)
                             .background(Color.appPrimaryGreen)
                             .cornerRadius(20)
+                        } else {
+                            // Profile button
+                            Button {
+                                showingProfileSheet = true
+                            } label: {
+                                Image(systemName: "person.circle.fill")
+                                    .font(.system(size: 32))
+                                    .foregroundColor(.appPrimaryGreen)
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -123,6 +134,10 @@ struct PantryView: View {
             .navigationBarHidden(true)
             .task {
                 await viewModel.loadItems()
+            }
+            .sheet(isPresented: $showingProfileSheet) {
+                ProfileView()
+                    .environmentObject(authViewModel)
             }
         }
     }

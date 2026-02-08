@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Combine
+import Supabase
 
 class RecipeViewModel: ObservableObject {
     @Published var recipes: [Recipe] = []
@@ -25,6 +26,14 @@ class RecipeViewModel: ObservableObject {
 
     private let recipeService = RecipeService()
     private let supabase = SupabaseService.shared
+
+    // MARK: - Helper to get current user ID
+
+    private var currentUserId: UUID? {
+        get async {
+            try? await supabase.client.auth.session.user.id
+        }
+    }
 
     // MARK: - Load recipes from Supabase (one-time cache)
     /// Only loads from database on first call; subsequent calls are no-ops unless recipes were generated/pruned.
@@ -115,10 +124,33 @@ class RecipeViewModel: ObservableObject {
             let newRecipes = try await recipeService.searchRecipes(ingredients: currentIngredients)
             print("🍳 Edamam returned \(newRecipes.count) recipes")
 
+            // Get current user ID
+            let userId = await currentUserId
+
+            // Add userId to all recipes
+            let recipesWithUserId = newRecipes.map { recipe in
+                Recipe(
+                    id: recipe.id,
+                    label: recipe.label,
+                    image: recipe.image,
+                    sourceUrl: recipe.sourceUrl,
+                    sourcePublisher: recipe.sourcePublisher,
+                    yield: recipe.yield,
+                    totalTime: recipe.totalTime,
+                    ingredientLines: recipe.ingredientLines,
+                    cuisineType: recipe.cuisineType,
+                    mealType: recipe.mealType,
+                    pantryItemsUsed: recipe.pantryItemsUsed,
+                    generatedFrom: recipe.generatedFrom,
+                    createdAt: recipe.createdAt,
+                    userId: userId
+                )
+            }
+
             // Save to Supabase, but avoid inserting recipes that already exist
             // Fetch current recipes from DB and filter duplicates by label+sourceUrl
             let existing = try await supabase.fetchRecipes()
-            let toInsert = newRecipes.filter { candidate in
+            let toInsert = recipesWithUserId.filter { candidate in
                 !existing.contains { existing in
                     existing.label == candidate.label && (existing.sourceUrl ?? "") == (candidate.sourceUrl ?? "")
                 }

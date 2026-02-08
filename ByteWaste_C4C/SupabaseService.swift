@@ -9,7 +9,8 @@ import Supabase
 class SupabaseService {
     static let shared = SupabaseService()
 
-    private let client: SupabaseClient
+    // Expose client for AuthViewModel to access auth methods
+    let client: SupabaseClient
 
     private init() {
         client = SupabaseClient(

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Combine
+import Supabase
 
 // MARK: - Models
 enum DisposalMethod: String, Codable {
@@ -38,6 +39,9 @@ struct PantryItem: Identifiable, Equatable, Codable {
     var amountRemaining: Double  // 0.0 to 1.0 (percentage)
     var initialQuantityAmount: Double?  // Optional: actual quantity from barcode (oz, grams, etc.)
 
+    // User association (for Supabase RLS)
+    var userId: UUID?
+
     // Map Swift camelCase to DB snake_case columns
     enum CodingKeys: String, CodingKey {
         case id, name, category, quantity, brand, notes, barcode
@@ -51,6 +55,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
         case genericName = "generic_name"
         case amountRemaining = "amount_remaining"
         case initialQuantityAmount = "initial_quantity_amount"
+        case userId = "user_id"
     }
 
     // Custom decoder to handle database NULLs and provide defaults
@@ -78,6 +83,9 @@ struct PantryItem: Identifiable, Equatable, Codable {
 
         // amountRemaining with default value of 1.0 if missing/NULL
         amountRemaining = (try? container.decode(Double.self, forKey: .amountRemaining)) ?? 1.0
+
+        // userId (optional, for auth)
+        userId = try? container.decode(UUID.self, forKey: .userId)
     }
 
     // Computed properties
@@ -129,7 +137,8 @@ struct PantryItem: Identifiable, Equatable, Codable {
         sustainabilityNotes: String? = nil,
         genericName: String? = nil,
         amountRemaining: Double = 1.0,
-        initialQuantityAmount: Double? = nil
+        initialQuantityAmount: Double? = nil,
+        userId: UUID? = nil
     ) {
         self.id = id
         self.name = name
@@ -148,6 +157,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
         self.genericName = genericName
         self.amountRemaining = amountRemaining
         self.initialQuantityAmount = initialQuantityAmount
+        self.userId = userId
     }
 }
 
@@ -168,6 +178,14 @@ class PantryViewModel: ObservableObject {
     private let supabase = SupabaseService.shared
     // Cache flag to avoid reloading pantry on tab switches
     private(set) var hasInitializedPantry = false
+
+    // MARK: - Helper to get current user ID
+
+    private var currentUserId: UUID? {
+        get async {
+            try? await supabase.client.auth.session.user.id
+        }
+    }
 
     // MARK: - Load from Supabase
 
@@ -312,7 +330,8 @@ class PantryViewModel: ObservableObject {
                     quantity: "1",
                     brand: cachedItem.brand,
                     notes: cachedItem.notes,
-                    sustainabilityNotes: cachedItem.sustainabilityNotes
+                    sustainabilityNotes: cachedItem.sustainabilityNotes,
+                    userId: await currentUserId
                 )
 
                 try await supabase.insertItem(newItem)
@@ -342,7 +361,8 @@ class PantryViewModel: ObservableObject {
                 brand: result.brand,
                 notes: result.notes,
                 sustainabilityNotes: result.sustainabilityNotes,
-                genericName: result.genericName
+                genericName: result.genericName,
+                userId: await currentUserId
             )
 
             // Save to Supabase
@@ -419,7 +439,8 @@ class PantryViewModel: ObservableObject {
                 brand: result.brand,
                 notes: result.notes,
                 sustainabilityNotes: result.sustainabilityNotes,
-                genericName: result.genericName
+                genericName: result.genericName,
+                userId: await currentUserId
             )
 
             // Save to Supabase
@@ -474,7 +495,8 @@ class PantryViewModel: ObservableObject {
                 quantity: "1",
                 brand: result.brand,
                 notes: result.notes,
-                sustainabilityNotes: result.sustainabilityNotes
+                sustainabilityNotes: result.sustainabilityNotes,
+                userId: await currentUserId
             )
 
             // Save to Supabase

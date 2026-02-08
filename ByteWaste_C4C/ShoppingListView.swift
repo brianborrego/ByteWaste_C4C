@@ -14,6 +14,7 @@ struct ShoppingListItem: Identifiable, Codable, Equatable {
     var sourceRecipeId: String?
     var sourceRecipeName: String?
     var imageURL: String?
+    var userId: UUID?
 
     // Map Swift camelCase to DB snake_case columns
     enum CodingKeys: String, CodingKey {
@@ -23,6 +24,7 @@ struct ShoppingListItem: Identifiable, Codable, Equatable {
         case sourceRecipeId = "source_recipe_id"
         case sourceRecipeName = "source_recipe_name"
         case imageURL = "image_url"
+        case userId = "user_id"
     }
 
     init(
@@ -32,7 +34,8 @@ struct ShoppingListItem: Identifiable, Codable, Equatable {
         dateAdded: Date = Date(),
         sourceRecipeId: String? = nil,
         sourceRecipeName: String? = nil,
-        imageURL: String? = nil
+        imageURL: String? = nil,
+        userId: UUID? = nil
     ) {
         self.id = id
         self.name = name
@@ -41,6 +44,7 @@ struct ShoppingListItem: Identifiable, Codable, Equatable {
         self.sourceRecipeId = sourceRecipeId
         self.sourceRecipeName = sourceRecipeName
         self.imageURL = imageURL
+        self.userId = userId
     }
 }
 
