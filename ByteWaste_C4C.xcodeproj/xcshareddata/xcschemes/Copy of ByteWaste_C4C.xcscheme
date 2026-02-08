@@ -82,11 +82,6 @@
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
-            key = "EDAMAM_NUTRIENTS_ENDPOINT"
-            value = "/api/food-database/v2/nutrients"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
             key = ""
             value = ""
             isEnabled = "YES">
