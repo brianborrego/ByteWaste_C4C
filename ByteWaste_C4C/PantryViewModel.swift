@@ -9,31 +9,64 @@ import SwiftUI
 import Combine
 
 // MARK: - Models
-struct PantryItem: Identifiable, Equatable {
-    let id = UUID()
+struct PantryItem: Identifiable, Equatable, Codable {
+    let id: UUID
     var name: String
-    var barcode: String?
-    var quantity: Double
-    var unit: Unit
+    var storageLocation: StorageLocation
+    let scanDate: Date  // NEVER changes - original add date
+    var currentExpirationDate: Date
+    var shelfLifeEstimates: ShelfLifeEstimates  // AI estimates for all 3 storage types
+    var edamamFoodId: String?
+    var imageURL: String?
+    var category: String?
 
-    enum Unit: String, CaseIterable, Identifiable {
-        case count, pounds, ounces, liters, gallons
-        var id: String { rawValue }
+    // Optional
+    var quantity: String?
+    var brand: String?
+    var notes: String?
 
-        func display(quantity: Double) -> String {
-            switch self {
-            case .count:
-                return "\(Int(quantity)) items"
-            case .pounds:
-                return String(format: "%.1f lb", quantity)
-            case .ounces:
-                return String(format: "%.0f oz", quantity)
-            case .liters:
-                return String(format: "%.1f L", quantity)
-            case .gallons:
-                return String(format: "%.1f gal", quantity)
-            }
-        }
+    // Computed properties
+    var daysUntilExpiration: Int {
+        Calendar.current.dateComponents([.day], from: Date(), to: currentExpirationDate).day ?? 0
+    }
+    
+    var isExpired: Bool {
+        currentExpirationDate < Date()
+    }
+    
+    var urgencyColor: Color {
+        let days = daysUntilExpiration
+        if days <= 3 { return .red }
+        else if days <= 7 { return .orange }
+        else { return .green }
+    }
+    
+    init(
+        id: UUID = UUID(),
+        name: String,
+        storageLocation: StorageLocation,
+        scanDate: Date = Date(),
+        currentExpirationDate: Date,
+        shelfLifeEstimates: ShelfLifeEstimates,
+        edamamFoodId: String? = nil,
+        imageURL: String? = nil,
+        category: String? = nil,
+        quantity: String? = nil,
+        brand: String? = nil,
+        notes: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.storageLocation = storageLocation
+        self.scanDate = scanDate
+        self.currentExpirationDate = currentExpirationDate
+        self.shelfLifeEstimates = shelfLifeEstimates
+        self.edamamFoodId = edamamFoodId
+        self.imageURL = imageURL
+        self.category = category
+        self.quantity = quantity
+        self.brand = brand
+        self.notes = notes
     }
 }
 
@@ -42,13 +75,22 @@ class PantryViewModel: ObservableObject {
     @Published var items: [PantryItem] = []
     @Published var isPresentingAddSheet = false
     @Published var isPresentingScannerSheet = false
-    @Published var scannedBarcode: String?
+    @Published var isAnalyzing = false
+    @Published var errorMessage: String?
+    
+    private let foodService = FoodExpirationService()
 
     init() {
+        // Sample data for testing
+        let sampleEstimates = ShelfLifeEstimates(fridge: 7, freezer: 30, shelf: 3)
         self.items = [
-            PantryItem(name: "Apples", barcode: "0123456789012", quantity: 4, unit: .count),
-            PantryItem(name: "Flour", barcode: "0123456789013", quantity: 2, unit: .pounds),
-            PantryItem(name: "Milk", barcode: "0123456789014", quantity: 1, unit: .gallons)
+            PantryItem(
+                name: "Sample Apple",
+                storageLocation: .fridge,
+                currentExpirationDate: Date().addingTimeInterval(86400 * 5),
+                shelfLifeEstimates: sampleEstimates,
+                category: "Fruit"
+            )
         ]
     }
 
@@ -57,15 +99,60 @@ class PantryViewModel: ObservableObject {
         isPresentingAddSheet = false
     }
 
-    func addFromBarcode(barcode: String, name: String) {
-        let newItem = PantryItem(
-            name: name,
-            barcode: barcode,
-            quantity: 1,
-            unit: .count
-        )
-        items.append(newItem)
-        isPresentingScannerSheet = false
+    /// Add item from barcode scan with AI analysis
+    func addFromBarcode(barcode: String) async {
+        await MainActor.run {
+            isAnalyzing = true
+            errorMessage = nil
+        }
+        
+        do {
+            let result = try await foodService.analyzeFood(barcode: barcode)
+            
+            let newItem = PantryItem(
+                name: result.name,
+                storageLocation: result.recommendedStorage,
+                scanDate: Date(),
+                currentExpirationDate: result.expirationDate,
+                shelfLifeEstimates: result.shelfLifeEstimates,
+                edamamFoodId: result.edamamFoodId,
+                imageURL: result.imageURL,
+                category: result.category,
+                quantity: "1",
+                brand: result.brand,
+                notes: result.notes
+            )
+            
+            await MainActor.run {
+                items.append(newItem)
+                isAnalyzing = false
+                isPresentingScannerSheet = false
+                
+                // Print JSON for debugging
+                printItemJSON(newItem)
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                isAnalyzing = false
+            }
+        }
+    }
+    
+    /// Print item as JSON
+    func printItemJSON(_ item: PantryItem) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        
+        if let jsonData = try? encoder.encode(item),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            print("\n" + String(repeating: "=", count: 60))
+            print("PANTRY ITEM JSON:")
+            print(String(repeating: "=", count: 60))
+            print(jsonString)
+            print(String(repeating: "=", count: 60) + "\n")
+        }
     }
 
     func delete(at offsets: IndexSet) {

@@ -23,8 +23,8 @@ struct BarcodeScannerView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: DataScannerViewController, context: Context) {
-        // Ensure scanning is active when view updates
-        if !uiViewController.isScanning {
+        // Only restart scanning if we haven't detected a barcode yet
+        if !uiViewController.isScanning && !context.coordinator.hasDetectedBarcode {
             try? uiViewController.startScanning()
         }
     }
@@ -35,6 +35,7 @@ struct BarcodeScannerView: UIViewControllerRepresentable {
 
     class Coordinator: NSObject, DataScannerViewControllerDelegate {
         var parent: BarcodeScannerView
+        var hasDetectedBarcode = false
 
         init(_ parent: BarcodeScannerView) {
             self.parent = parent
@@ -44,9 +45,13 @@ struct BarcodeScannerView: UIViewControllerRepresentable {
             _ dataScanner: DataScannerViewController,
             didTapOn item: RecognizedItem
         ) {
+            guard !hasDetectedBarcode else { return }
+
             switch item {
             case .barcode(let barcode):
                 if let barcodeValue = barcode.payloadStringValue {
+                    hasDetectedBarcode = true
+                    dataScanner.stopScanning()
                     parent.onBarcodeDetected(barcodeValue)
                     parent.dismiss()
                 }
@@ -60,11 +65,16 @@ struct BarcodeScannerView: UIViewControllerRepresentable {
             didUpdate addedItems: [RecognizedItem],
             allItems: [RecognizedItem]
         ) {
+            guard !hasDetectedBarcode else { return }
+
             for item in addedItems {
                 if case .barcode(let barcode) = item {
                     if let barcodeValue = barcode.payloadStringValue {
+                        hasDetectedBarcode = true
+                        dataScanner.stopScanning()
                         parent.onBarcodeDetected(barcodeValue)
                         parent.dismiss()
+                        break // Exit loop after first detection
                     }
                 }
             }
@@ -88,62 +98,79 @@ struct BarcodeScannerView: UIViewControllerRepresentable {
 struct BarcodeScannerSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: PantryViewModel
-    @State private var productName: String = ""
     @State private var scannedBarcode: String = ""
     @State private var showingScanner = false
-    @State private var showingNamePrompt = false
+    @State private var isProcessingBarcode = false
 
     var body: some View {
         NavigationStack {
             VStack {
-                if !scannedBarcode.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "barcode.viewfinder")
-                            .font(.system(size: 48))
-                            .foregroundColor(.green)
-
-                        Text("Barcode Scanned")
+                if viewModel.isAnalyzing {
+                    // Show loading state
+                    VStack(spacing: 20) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                        
+                        Text("Analyzing Product...")
                             .font(.headline)
+                        
+                        Text("Using AI to estimate shelf life")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        if !scannedBarcode.isEmpty {
+                            Text(scannedBarcode)
+                                .font(.monospaced(.caption)())
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    
+                } else if !scannedBarcode.isEmpty && viewModel.errorMessage != nil {
+                    // Show error state
+                    VStack(spacing: 16) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 48))
+                            .foregroundColor(.orange)
 
-                        Text(scannedBarcode)
-                            .font(.monospaced(.body)())
+                        Text("Analysis Failed")
+                            .font(.headline)
+                        
+                        if let error = viewModel.errorMessage {
+                            Text(error)
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding()
+                        }
+
+                        Text("Scanned: \(scannedBarcode)")
+                            .font(.monospaced(.caption)())
                             .textSelection(.enabled)
                             .padding()
                             .background(Color.gray.opacity(0.1))
                             .cornerRadius(8)
 
-                        Form {
-                            Section("Product Name") {
-                                TextField("Enter product name", text: $productName)
-                            }
-                        }
-                        .frame(maxHeight: 200)
-
                         HStack(spacing: 12) {
-                            Button("Scan Again") {
+                            Button("Try Again") {
                                 scannedBarcode = ""
-                                productName = ""
+                                viewModel.errorMessage = nil
+                                isProcessingBarcode = false
                                 showingScanner = true
                             }
-                            .buttonStyle(.bordered)
-
-                            Button("Add Item") {
-                                if !productName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    viewModel.addFromBarcode(
-                                        barcode: scannedBarcode,
-                                        name: productName.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    )
-                                    dismiss()
-                                }
-                            }
                             .buttonStyle(.borderedProminent)
-                            .disabled(productName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                            Button("Cancel") {
+                                dismiss()
+                            }
+                            .buttonStyle(.bordered)
                         }
                         .padding()
 
                         Spacer()
                     }
                     .padding()
+                    
                 } else {
                     VStack(spacing: 20) {
                         Image(systemName: "barcode")
@@ -154,9 +181,10 @@ struct BarcodeScannerSheetView: View {
                             .font(.title2)
                             .fontWeight(.semibold)
 
-                        Text("Point your camera at a barcode to scan")
+                        Text("Point your camera at a barcode to automatically analyze and add the product")
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
+                            .padding(.horizontal)
 
                         Button("Start Scanning") {
                             showingScanner = true
@@ -170,16 +198,29 @@ struct BarcodeScannerSheetView: View {
                     .background(Color(.systemBackground))
                 }
             }
-            .navigationTitle("Scan Barcode")
+            .navigationTitle("Scan Product")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") { 
+                        dismiss() 
+                    }
+                    .disabled(viewModel.isAnalyzing)
                 }
             }
             .sheet(isPresented: $showingScanner) {
                 BarcodeScannerView { barcode in
+                    // Prevent multiple processing of the same scan
+                    guard !isProcessingBarcode else { return }
+
+                    isProcessingBarcode = true
                     scannedBarcode = barcode
                     showingScanner = false
+
+                    // Trigger AI analysis
+                    Task {
+                        await viewModel.addFromBarcode(barcode: barcode)
+                        isProcessingBarcode = false
+                    }
                 }
                 .ignoresSafeArea()
             }
