@@ -373,6 +373,7 @@ class PantryViewModel: ObservableObject {
                 isAnalyzing = false
                 isPresentingScannerSheet = false
                 onItemAdded?(items)
+                onItemAdded?(items)
             }
         } catch {
             // Check if error is "no results" or 404 - if so, open manual entry with barcode pre-filled
@@ -572,8 +573,29 @@ class PantryViewModel: ObservableObject {
     }
 
     func disposeItem(_ item: PantryItem, method: DisposalMethod) {
-        // TODO: Track disposal method for rewards/punishment system
         print("📊 Item disposed: \(item.name) - Method: \(method.rawValue)")
+
+        // Award sustainability points based on disposal method
+        let currentPoints = UserDefaults.standard.integer(forKey: "sustainabilityPoints")
+        var pointsChange = 0
+
+        switch method {
+        case .usedFully:
+            pointsChange = 10
+        case .usedPartially:
+            pointsChange = 5
+        case .thrownAway:
+            pointsChange = -5
+        }
+
+        let newPoints = max(0, min(100, currentPoints + pointsChange))  // Clamp between 0-100
+        UserDefaults.standard.set(newPoints, forKey: "sustainabilityPoints")
+
+        // Update tree level based on points (level = points / 10)
+        let newLevel = newPoints / 10
+        UserDefaults.standard.set(newLevel, forKey: "treeLevel")
+
+        print("🌱 Sustainability points: \(currentPoints) → \(newPoints) (\(pointsChange >= 0 ? "+" : "")\(pointsChange)) | Level: \(newLevel)")
 
         // Optimistic removal from local array
         if let index = items.firstIndex(where: { $0.id == item.id }) {

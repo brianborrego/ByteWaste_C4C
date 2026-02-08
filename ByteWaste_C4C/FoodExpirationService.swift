@@ -24,9 +24,9 @@ public enum StorageLocation: String, Codable, CaseIterable {
     
     public var displayName: String {
         switch self {
-        case .fridge: return "Refrigerator"
+        case .fridge: return "Fridge"
         case .freezer: return "Freezer"
-        case .shelf: return "Pantry/Shelf"
+        case .shelf: return "Pantry"
         }
     }
     
@@ -308,7 +308,7 @@ public class FoodExpirationService {
         3. Use integer numbers for all day values, never strings
         4. The "recommended_storage" must be exactly one of: "fridge", "freezer", or "shelf"
 
-        STORAGE & EXPIRATION GUIDELINES:
+        STORAGE & EXPIRATION GUIDELINES (ADHERE TO THESE STRICTLY):
 
         Be GENEROUS with expiration dates - modern food preservation means items last longer than you might think:
         - Regular (non-organic) eggs: 28-35 days in fridge (preservatives help them last)

@@ -18,7 +18,7 @@ enum AppTab: Int, CaseIterable {
         case .pantry:
             return "cabinet.fill"
         case .recipes:
-            return "book.fill"
+            return "fork.knife"
         case .shopping:
             return "cart.fill"
         case .sustainability:
@@ -36,10 +36,11 @@ struct CustomTabBar: View {
 
     var body: some View {
         ZStack {
-            // Opaque background bar with rounded edges
+            // Opaque background bar with rounded edges and shadow
             Color.appCream
                 .frame(height: 80)
                 .cornerRadius(20, corners: [.topLeft, .topRight])
+                .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: -4)
 
             // Main tab bar with icons
             HStack(spacing: 0) {
@@ -73,7 +74,8 @@ struct CustomTabBar: View {
                             Circle()
                                 .fill(Color.appPrimaryGreen)
                                 .frame(width: 76, height: 76)
-                                .shadow(color: Color.appPrimaryGreen.opacity(0.4), radius: 12, x: 0, y: 6)
+                                .shadow(color: Color.appPrimaryGreen.opacity(0.5), radius: 16, x: 0, y: 8)
+                                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
 
                             Image(systemName: showAddMenu ? "xmark" : "plus")
                                 .font(.system(size: 30, weight: .semibold))

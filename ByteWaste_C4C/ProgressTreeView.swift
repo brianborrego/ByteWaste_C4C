@@ -19,6 +19,7 @@ struct TreeViewRepresentable: UIViewRepresentable {
 
 struct ProgressTreeView: View {
     @State private var level: Int = UserDefaults.standard.integer(forKey: "treeLevel")
+    @State private var sustainabilityPoints: Int = UserDefaults.standard.integer(forKey: "sustainabilityPoints")
     @State private var shouldAnimate = false
 
     var body: some View {
@@ -31,12 +32,34 @@ struct ProgressTreeView: View {
                     .ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    Text("Level \(level) / 10")
+                    HStack {
+                        // Sustainability counter in top left
+                        HStack(spacing: 8) {
+                            Image(systemName: "leaf.fill")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(Color(hex: "#405C2C"))  // Dark green
+
+                            Text("\(sustainabilityPoints)")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(.black)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.white)
+                        .clipShape(Capsule())
+                        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                        .padding(.leading, 20)
+
+                        Spacer()
+                    }
+                    .padding(.top, 20)
+
+                    Text("\(level) / 10")
                         .font(.title)
                         .fontWeight(.bold)
                         .foregroundStyle(.white)
                         .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
-                        .padding(.top, 30)
+                        .padding(.top, 10)
 
                     TreeViewRepresentable(
                         growth: growthValue(level: level),
@@ -48,12 +71,15 @@ struct ProgressTreeView: View {
                     // Buttons just above the tab bar
                     HStack {
                         Button {
-                            if level < 10 {
-                                level += 1
+                            if sustainabilityPoints < 100 {
+                                sustainabilityPoints += 10
+                                UserDefaults.standard.set(sustainabilityPoints, forKey: "sustainabilityPoints")
+                                // Update level based on points
+                                level = sustainabilityPoints / 10
                                 UserDefaults.standard.set(level, forKey: "treeLevel")
                             }
                         } label: {
-                            Label("Level Up", systemImage: "plus.circle.fill")
+                            Label("Add Points", systemImage: "plus.circle.fill")
                                 .font(.headline)
                                 .padding(.horizontal, 15)
                                 .padding(.vertical, 15)
@@ -61,12 +87,14 @@ struct ProgressTreeView: View {
                                 .foregroundStyle(.white)
                                 .clipShape(Capsule())
                         }
-                        .disabled(level >= 10)
+                        .disabled(sustainabilityPoints >= 100)
 
                         Spacer()
 
                         Button {
+                            sustainabilityPoints = 0
                             level = 0
+                            UserDefaults.standard.set(0, forKey: "sustainabilityPoints")
                             UserDefaults.standard.set(0, forKey: "treeLevel")
                         } label: {
                             Label("Reset", systemImage: "arrow.counterclockwise")
@@ -84,7 +112,12 @@ struct ProgressTreeView: View {
             }
             .navigationBarHidden(true)
             .onAppear {
-                level = UserDefaults.standard.integer(forKey: "treeLevel")
+                // Load sustainability points and calculate level
+                sustainabilityPoints = UserDefaults.standard.integer(forKey: "sustainabilityPoints")
+                level = sustainabilityPoints / 10
+                // Sync level with calculated value
+                UserDefaults.standard.set(level, forKey: "treeLevel")
+
                 shouldAnimate = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     shouldAnimate = true

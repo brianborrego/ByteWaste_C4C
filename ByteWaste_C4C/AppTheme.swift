@@ -20,6 +20,10 @@ extension Color {
     // UI Elements
     static let appIconGray = Color(hex: AppColors.iconGray)
 
+    // Disposal colors
+    static let appDisposalRed = Color(hex: AppColors.disposalThrownAwayRed)
+    static let appDisposalYellow = Color(hex: AppColors.disposalUsedPartiallyYellow)
+
     // Gradients
     static let appGradientTop = Color(hex: AppColors.gradientBrownTop)
     static let appGradientBottom = Color(hex: AppColors.gradientBrownBottom)
