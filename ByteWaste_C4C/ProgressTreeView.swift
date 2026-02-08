@@ -41,8 +41,14 @@ struct ForestPine: Codable, Identifiable {
         // Random y-axis flip (50% chance)
         self.shouldFlip = Bool.random()
 
-        // Random x position across full width (avoid extreme edges)
-        self.xPosition = CGFloat.random(in: 0.15...0.85)
+        // Random x position spread across full width, biased toward edges
+        // Pick a side (left or right) then place within that half to avoid center clustering
+        let side = Bool.random()
+        if side {
+            self.xPosition = CGFloat.random(in: 0.05...0.40)
+        } else {
+            self.xPosition = CGFloat.random(in: 0.60...0.95)
+        }
 
         // Y position depends on hill layer (closer hills are lower on screen)
         switch self.hillLayer {
@@ -221,18 +227,6 @@ struct ProgressTreeView: View {
                     }
                     .padding(.top, 20)
                     .zIndex(100)  // UI elements on top
-
-                    Text("\(level) / 10")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.linearGradient(
-                            colors: [.appGradientTop, .appGradientBottom],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ))
-                        .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
-                        .padding(.top, 10)
-                        .zIndex(100)  // UI elements on top
 
                     TreeViewRepresentable(
                         growth: growthValue(level: level),
