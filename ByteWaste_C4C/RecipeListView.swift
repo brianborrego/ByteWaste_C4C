@@ -17,18 +17,24 @@ struct RecipeListView: View {
                     ProgressView("Loading recipes...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if viewModel.recipes.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "book.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray)
-                        Text("No Recipes Yet")
-                            .font(.headline)
-                        Text("Add items to your pantry to discover recipes using your ingredients")
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal)
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            Image(systemName: "book.fill")
+                                .font(.system(size: 60))
+                                .foregroundColor(.gray)
+                            Text("No Recipes Yet")
+                                .font(.headline)
+                            Text("Add items to your pantry to discover recipes using your ingredients.\nPull down to refresh.")
+                                .multilineTextAlignment(.center)
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 100)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .refreshable {
+                        await viewModel.refreshRecipes()
+                    }
                     .background(Color(.systemBackground))
                 } else {
                     ZStack {
@@ -43,6 +49,9 @@ struct RecipeListView: View {
                                     viewModel.deleteRecipe(viewModel.recipes[index])
                                 }
                             }
+                        }
+                        .refreshable {
+                            await viewModel.refreshRecipes()
                         }
                         .listStyle(.plain)
 
@@ -69,9 +78,6 @@ struct RecipeListView: View {
             }
             .navigationTitle("Recipes")
             .navigationBarTitleDisplayMode(.inline)
-            .task {
-                await viewModel.loadRecipes()
-            }
             .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
                 Button("OK") {
                     viewModel.errorMessage = nil
@@ -131,15 +137,7 @@ struct RecipeRowView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
 
-                // Time badge
-                if let totalTime = recipe.totalTime {
-                    HStack(spacing: 4) {
-                        Image(systemName: "clock")
-                        Text(recipe.formattedTime)
-                    }
-                    .font(.caption2)
-                    .foregroundColor(.blue)
-                }
+
 
                 // Pantry match indicator
                 if !recipe.pantryItemsUsed.isEmpty {
@@ -214,14 +212,7 @@ struct RecipeDetailView: View {
                             }
                         }
 
-                        if let totalTime = recipe.totalTime {
-                            VStack(spacing: 4) {
-                                Image(systemName: "clock.fill")
-                                    .foregroundColor(.orange)
-                                Text(recipe.formattedTime)
-                                    .font(.caption)
-                            }
-                        }
+
 
                         if let source = recipe.sourcePublisher {
                             VStack(spacing: 4) {

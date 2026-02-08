@@ -162,26 +162,103 @@ class PantryViewModel: ObservableObject {
     @Published var barcodeForManualEntry: String?  // Barcode to pre-fill in manual entry
 
     var onItemAdded: (([PantryItem]) -> Void)?
+    var onItemsRemoved: (([PantryItem]) -> Void)?
 
     private let foodService = FoodExpirationService()
     private let supabase = SupabaseService.shared
+    // Cache flag to avoid reloading pantry on tab switches
+    private(set) var hasInitializedPantry = false
 
     // MARK: - Load from Supabase
 
     func loadItems() async {
+        // Skip if already loaded (cached)
+        if hasInitializedPantry {
+            print("⚡ Pantry already cached, skipping reload")
+            return
+        }
+
         print("🔄 Loading items from Supabase...")
         await MainActor.run { isLoading = true }
+        // Capture previous state so we can notify callbacks about changes
+        let previousItems = items
         do {
             let fetched = try await supabase.fetchItems()
             print("✅ Successfully fetched \(fetched.count) items from Supabase")
             await MainActor.run {
                 items = fetched
                 isLoading = false
+                hasInitializedPantry = true
+
+                // Notify listeners about additions/removals compared to previous snapshot
+                let previousIDs = Set(previousItems.map { $0.id })
+                let fetchedIDs = Set(fetched.map { $0.id })
+
+                let removed = previousIDs.subtracting(fetchedIDs)
+                let added = fetchedIDs.subtracting(previousIDs)
+
+                if !removed.isEmpty {
+                    onItemsRemoved?(items)
+                } else if !added.isEmpty {
+                    onItemAdded?(items)
+                }
             }
         } catch {
+            // Ignore cancellation errors (tab switching, view lifecycle, pull-to-refresh cancelled)
+            if (error is CancellationError) || ((error as NSError).domain == NSURLErrorDomain && (error as NSError).code == NSURLErrorCancelled) {
+                print("ℹ️ Load pantry items request was cancelled")
+                await MainActor.run { isLoading = false }
+                return
+            }
+
             print("❌ Failed to load items from Supabase: \(error)")
             await MainActor.run {
                 errorMessage = "Failed to load items: \(error.localizedDescription)"
+                isLoading = false
+            }
+        }
+    }
+
+    /// Force-refresh pantry from the database (clears cache and reloads).
+    /// Uses Task.detached so the Supabase fetch survives SwiftUI .refreshable cancellation.
+    func refreshItems() async {
+        hasInitializedPantry = false
+        await MainActor.run { isLoading = true }
+
+        let result: Result<[PantryItem], Error> = await withCheckedContinuation { continuation in
+            Task.detached { [supabase] in
+                do {
+                    let fetched = try await supabase.fetchItems()
+                    continuation.resume(returning: .success(fetched))
+                } catch {
+                    continuation.resume(returning: .failure(error))
+                }
+            }
+        }
+
+        switch result {
+        case .success(let fetched):
+            let previousItems = items
+            await MainActor.run {
+                items = fetched
+                isLoading = false
+                hasInitializedPantry = true
+
+                let previousIDs = Set(previousItems.map { $0.id })
+                let fetchedIDs = Set(fetched.map { $0.id })
+                let removed = previousIDs.subtracting(fetchedIDs)
+                let added = fetchedIDs.subtracting(previousIDs)
+
+                if !removed.isEmpty {
+                    onItemsRemoved?(items)
+                } else if !added.isEmpty {
+                    onItemAdded?(items)
+                }
+            }
+        case .failure(let error):
+            print("❌ Failed to refresh items from Supabase: \(error)")
+            await MainActor.run {
+                errorMessage = "Failed to refresh items: \(error.localizedDescription)"
                 isLoading = false
             }
         }
@@ -438,6 +515,8 @@ class PantryViewModel: ObservableObject {
     func delete(at offsets: IndexSet) {
         let itemsToDelete = offsets.map { items[$0] }
         items.remove(atOffsets: offsets)
+        // Notify listeners about the removal (pass remaining items)
+        onItemsRemoved?(items)
         Task {
             for item in itemsToDelete {
                 do {
@@ -477,6 +556,8 @@ class PantryViewModel: ObservableObject {
         // Optimistic removal from local array
         if let index = items.firstIndex(where: { $0.id == item.id }) {
             items.remove(at: index)
+            // Notify listeners after optimistic removal
+            onItemsRemoved?(items)
         }
 
         // Delete from Supabase

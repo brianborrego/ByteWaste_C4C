@@ -8,10 +8,11 @@
 import SwiftUI
 
 struct ContentView: View {
+    @StateObject private var pantryViewModel = PantryViewModel()
     @StateObject private var recipeViewModel = RecipeViewModel()
     @State private var selectedTab: AppTab = .pantry
     @State private var showAddMenu = false
-    @StateObject private var pantryViewModel = PantryViewModel()
+    
     var body: some View {
         ZStack {
             // Persistent cream background (prevents flashing)
@@ -95,6 +96,23 @@ struct ContentView: View {
             Task {
                 await recipeViewModel.generateRecipesIfNeeded(pantryItems: newItems)
             }
+        }
+        .onAppear {
+            // Wire pantry callbacks to recipe generation/pruning
+            pantryViewModel.onItemAdded = { items in
+                Task { await recipeViewModel.generateRecipesIfNeeded(pantryItems: items) }
+            }
+
+            pantryViewModel.onItemsRemoved = { items in
+                Task { await recipeViewModel.pruneRecipesIfNeeded(remainingPantryItems: items) }
+            }
+
+            // Let RecipeViewModel access current pantry items (for refresh/regeneration)
+            recipeViewModel.pantryItemsProvider = { pantryViewModel.items }
+        }
+        .task {
+            await pantryViewModel.loadItems()
+            await recipeViewModel.loadRecipes()
         }
     }
 }

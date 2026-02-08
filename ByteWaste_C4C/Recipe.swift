@@ -33,7 +33,7 @@ struct Recipe: Identifiable, Codable {
         case createdAt = "created_at"
     }
 
-    // Custom decoder to handle database nulls
+    // Custom decoder to handle database NULLs for non-optional arrays
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
@@ -82,27 +82,21 @@ struct Recipe: Identifiable, Codable {
         self.createdAt = createdAt
     }
 
-    // Helper: convert time in minutes to readable format (e.g., "30m" or "1h 30m")
-    var formattedTime: String {
-        guard let minutes = totalTime else { return "Unknown" }
-        if minutes < 60 {
-            return "\(minutes)m"
-        } else {
-            let hours = minutes / 60
-            let mins = minutes % 60
-            return mins > 0 ? "\(hours)h \(mins)m" : "\(hours)h"
-        }
+    // Computed properties for UI and filtering
+    var totalIngredients: Int {
+        ingredientLines.count
     }
 
-    // Helper: recipe snippet for list display
+    var missingCount: Int {
+        max(0, totalIngredients - pantryItemsUsed.count)
+    }
+
     var subtitle: String {
         var parts: [String] = []
-        if let yield = yield {
-            parts.append("Serves \(yield)")
+        parts.append("\(totalIngredients) ingredients")
+        if let t = totalTime, t > 0 {
+            parts.append("\(t)m")
         }
-        if !ingredientLines.isEmpty {
-            parts.append("\(ingredientLines.count) ingredients")
-        }
-        return parts.joined(separator: " • ")
+        return parts.joined(separator: " · ")
     }
 }
