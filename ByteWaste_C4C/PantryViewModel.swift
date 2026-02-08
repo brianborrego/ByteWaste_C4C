@@ -126,7 +126,8 @@ class PantryViewModel: ObservableObject {
             await MainActor.run {
                 items.append(newItem)
                 isAnalyzing = false
-                isPresentingScannerSheet = false
+                // Don't auto-dismiss - let the view handle it
+                // isPresentingScannerSheet = false
                 
                 // Print JSON for debugging
                 printItemJSON(newItem)
@@ -135,10 +136,11 @@ class PantryViewModel: ObservableObject {
             await MainActor.run {
                 errorMessage = error.localizedDescription
                 isAnalyzing = false
+                print("❌ Error adding item from barcode: \(error.localizedDescription)")
             }
         }
     }
-    
+
     /// Add item from image classification with AI analysis
     func addFromImageClassification(foodName: String) async {
         await MainActor.run {
@@ -166,7 +168,8 @@ class PantryViewModel: ObservableObject {
             await MainActor.run {
                 items.append(newItem)
                 isAnalyzing = false
-                isPresentingScannerSheet = false
+                // Don't auto-dismiss - let the view handle it
+                // isPresentingScannerSheet = false
                 
                 // Print JSON for debugging
                 printItemJSON(newItem)
@@ -175,10 +178,11 @@ class PantryViewModel: ObservableObject {
             await MainActor.run {
                 errorMessage = error.localizedDescription
                 isAnalyzing = false
+                print("❌ Error adding item from image: \(error.localizedDescription)")
             }
         }
     }
-    
+
     /// Print item as JSON
     func printItemJSON(_ item: PantryItem) {
         let encoder = JSONEncoder()
