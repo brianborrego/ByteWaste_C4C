@@ -660,7 +660,7 @@ public class FoodExpirationService {
     }
     
     /// Search for generic food image if barcode scan didn't return one
-    private func fetchGenericFoodImage(genericName: String) async -> String? {
+    public func fetchGenericFoodImage(genericName: String) async -> String? {
         do {
             let genericFood = try await searchFoodByName(name: genericName)
             return genericFood.image
@@ -718,23 +718,25 @@ public class FoodExpirationService {
 }
 
 // MARK: - Errors
-public enum ServiceError: LocalizedError {
-    case invalidURL
-    case apiError(String)
-    case noResults
-    case parseError
-    
-    public var errorDescription: String? {
-        switch self {
-        case .invalidURL:
-            return "Invalid API URL"
-        case .apiError(let message):
-            return message
-        case .noResults:
-            return "No food found for this barcode"
-        case .parseError:
-            return "Failed to parse API response"
+extension FoodExpirationService {
+    public enum ServiceError: LocalizedError {
+        case invalidURL
+        case apiError(String)
+        case noResults
+        case parseError
+        
+        public var errorDescription: String? {
+            switch self {
+            case .invalidURL:
+                return "Invalid API URL"
+            case .apiError(let message):
+                return message
+            case .noResults:
+                return "No food found for this barcode"
+            case .parseError:
+                return "Failed to parse API response"
+            }
         }
     }
+    
 }
-
