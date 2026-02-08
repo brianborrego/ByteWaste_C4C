@@ -6,8 +6,11 @@ struct PantryView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                if model.items.isEmpty {
-                    // Empty state
+                if model.isLoading {
+                    // Loading state
+                    ProgressView("Loading pantry...")
+                } else if model.items.isEmpty {
+                    // Empty state (only shown after loading completes)
                     VStack(spacing: 12) {
                         Image(systemName: "tray")
                             .font(.system(size: 64))
@@ -60,11 +63,6 @@ struct PantryView: View {
             }
             .task {
                 await model.loadItems()
-            }
-            .overlay {
-                if model.isLoading && model.items.isEmpty {
-                    ProgressView("Loading pantry...")
-                }
             }
         }
     }
