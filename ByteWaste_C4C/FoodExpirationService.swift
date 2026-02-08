@@ -7,39 +7,13 @@
 
 import Foundation
 
-// MARK: - Configuration (uses Xcode Environment Variables)
+// MARK: - Configuration (reads from Config.swift)
 fileprivate struct APIConfig {
-    // Get value from Xcode Environment Variables only
-    private static func value(for key: String) -> String {
-        // Check Xcode environment variables
-        if let env = ProcessInfo.processInfo.environment[key], !env.isEmpty {
-            return env
-        }
-        // Fall back to Info.plist if needed
-        if let plist = Bundle.main.object(forInfoDictionaryKey: key) as? String, !plist.isEmpty {
-            return plist
-        }
-        return ""
-    }
-
-    // Edamam Food Database API
-    static var EDAMAM_BASE_URL: String {
-        value(for: "EDAMAM_BASE_URL")
-    }
-    static var FOOD_APP_ID: String {
-        value(for: "FOOD_APP_ID")
-    }
-    static var FOOD_APP_KEY: String {
-        value(for: "FOOD_APP_KEY")
-    }
-
-    // Navigator AI API
-    static var NAVIGATOR_API_ENDPOINT: String {
-        value(for: "NAVIGATOR_API_ENDPOINT")
-    }
-    static var NAVIGATOR_API_KEY: String {
-        value(for: "NAVIGATOR_API_KEY")
-    }
+    static var EDAMAM_BASE_URL: String { Config.EDAMAM_BASE_URL }
+    static var FOOD_APP_ID: String { Config.FOOD_APP_ID }
+    static var FOOD_APP_KEY: String { Config.FOOD_APP_KEY }
+    static var NAVIGATOR_API_ENDPOINT: String { Config.navigatorAPIEndpoint }
+    static var NAVIGATOR_API_KEY: String { Config.navigatorAPIKey }
 }
 
 // MARK: - Models

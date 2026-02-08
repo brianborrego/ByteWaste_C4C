@@ -36,6 +36,17 @@ struct PantryItem: Identifiable, Equatable, Codable {
     var amountRemaining: Double  // 0.0 to 1.0 (percentage)
     var initialQuantityAmount: Double?  // Optional: actual quantity from barcode (oz, grams, etc.)
 
+    // Map Swift camelCase to DB snake_case columns
+    enum CodingKeys: String, CodingKey {
+        case id, name, category, quantity, brand, notes
+        case storageLocation = "storage_location"
+        case scanDate = "scan_date"
+        case currentExpirationDate = "current_expiration_date"
+        case shelfLifeEstimates = "shelf_life_estimates"
+        case edamamFoodId = "edamam_food_id"
+        case imageURL = "image_url"
+    }
+
     // Computed properties
     var daysUntilExpiration: Int {
         Calendar.current.dateComponents([.day], from: Date(), to: currentExpirationDate).day ?? 0
@@ -109,30 +120,58 @@ class PantryViewModel: ObservableObject {
     @Published var isPresentingAddSheet = false
     @Published var isPresentingScannerSheet = false
     @Published var isAnalyzing = false
+    @Published var isLoading = false
     @Published var errorMessage: String?
-    
-    private let foodService = FoodExpirationService()
 
-    init() {
-        // Start with empty pantry
-        self.items = []
+    private let foodService = FoodExpirationService()
+    private let supabase = SupabaseService.shared
+
+    // MARK: - Load from Supabase
+
+    func loadItems() async {
+        await MainActor.run { isLoading = true }
+        do {
+            let fetched = try await supabase.fetchItems()
+            await MainActor.run {
+                items = fetched
+                isLoading = false
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = "Failed to load items: \(error.localizedDescription)"
+                isLoading = false
+            }
+        }
     }
+
+    // MARK: - Add (optimistic update + Supabase save)
 
     func add(_ item: PantryItem) {
         items.append(item)
         isPresentingAddSheet = false
+        Task {
+            do {
+                try await supabase.insertItem(item)
+            } catch {
+                await MainActor.run {
+                    items.removeAll { $0.id == item.id }
+                    errorMessage = "Failed to save: \(error.localizedDescription)"
+                }
+            }
+        }
     }
 
-    /// Add item from barcode scan with AI analysis
+    // MARK: - Add from barcode scan with AI analysis
+
     func addFromBarcode(barcode: String) async {
         await MainActor.run {
             isAnalyzing = true
             errorMessage = nil
         }
-        
+
         do {
             let result = try await foodService.analyzeFood(barcode: barcode)
-            
+
             let newItem = PantryItem(
                 name: result.name,
                 storageLocation: result.recommendedStorage,
@@ -147,14 +186,14 @@ class PantryViewModel: ObservableObject {
                 notes: result.notes,
                 sustainabilityNotes: result.sustainabilityNotes
             )
-            
+
+            // Save to Supabase
+            try await supabase.insertItem(newItem)
+
             await MainActor.run {
                 items.append(newItem)
                 isAnalyzing = false
                 isPresentingScannerSheet = false
-                
-                // Print JSON for debugging
-                printItemJSON(newItem)
             }
         } catch {
             await MainActor.run {
@@ -188,14 +227,14 @@ class PantryViewModel: ObservableObject {
                 notes: result.notes,
                 sustainabilityNotes: result.sustainabilityNotes
             )
-            
+
+            // Save to Supabase
+            try await supabase.insertItem(newItem)
+
             await MainActor.run {
                 items.append(newItem)
                 isAnalyzing = false
                 isPresentingScannerSheet = false
-                
-                // Print JSON for debugging
-                printItemJSON(newItem)
             }
         } catch {
             await MainActor.run {
@@ -221,8 +260,22 @@ class PantryViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Delete (optimistic update + Supabase delete)
+
     func delete(at offsets: IndexSet) {
+        let itemsToDelete = offsets.map { items[$0] }
         items.remove(atOffsets: offsets)
+        Task {
+            for item in itemsToDelete {
+                do {
+                    try await supabase.deleteItem(id: item.id)
+                } catch {
+                    await MainActor.run {
+                        errorMessage = "Failed to delete: \(error.localizedDescription)"
+                    }
+                }
+            }
+        }
     }
 
     func updateItemAmount(_ item: PantryItem, newAmount: Double) {

@@ -58,6 +58,14 @@ struct PantryView: View {
                 // Use the new Smart Scanner instead of the basic barcode scanner
                 SmartScannerSheetView(viewModel: model)
             }
+            .task {
+                await model.loadItems()
+            }
+            .overlay {
+                if model.isLoading && model.items.isEmpty {
+                    ProgressView("Loading pantry...")
+                }
+            }
         }
     }
 }
