@@ -164,13 +164,33 @@ struct LoginView: View {
     private func handleAppleSignIn(_ result: Result<ASAuthorization, Error>) {
         switch result {
         case .success(let authorization):
-            guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
-                  let appleIDToken = appleIDCredential.identityToken,
-                  let idTokenString = String(data: appleIDToken, encoding: .utf8),
-                  let nonce = currentNonce else {
-                authViewModel.errorMessage = "Failed to get Apple ID token"
+            guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+                authViewModel.errorMessage = "Failed to get Apple ID credential"
+                print("❌ Could not cast to ASAuthorizationAppleIDCredential")
                 return
             }
+
+            guard let appleIDToken = appleIDCredential.identityToken else {
+                authViewModel.errorMessage = "Failed to get identity token"
+                print("❌ Identity token is nil")
+                return
+            }
+
+            guard let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
+                authViewModel.errorMessage = "Failed to decode identity token"
+                print("❌ Could not decode token data to string")
+                return
+            }
+
+            guard let nonce = currentNonce else {
+                authViewModel.errorMessage = "Invalid nonce"
+                print("❌ Current nonce is nil")
+                return
+            }
+
+            print("✅ Apple Sign-In credential received")
+            print("📧 Email: \(appleIDCredential.email ?? "not provided")")
+            print("👤 User ID: \(appleIDCredential.user)")
 
             Task {
                 await authViewModel.signInWithApple(
@@ -180,7 +200,22 @@ struct LoginView: View {
             }
 
         case .failure(let error):
-            authViewModel.errorMessage = "Apple Sign-In failed: \(error.localizedDescription)"
+            let nsError = error as NSError
+            print("❌ Apple Sign-In error: \(error)")
+            print("❌ Error code: \(nsError.code)")
+            print("❌ Error domain: \(nsError.domain)")
+
+            // Provide more helpful error messages
+            switch nsError.code {
+            case 1000:
+                authViewModel.errorMessage = "Apple Sign-In configuration error. Check Xcode capabilities and Apple Developer settings."
+            case 1001:
+                authViewModel.errorMessage = "Sign-In was cancelled"
+            case 1004:
+                authViewModel.errorMessage = "Sign-In not available. Check device settings."
+            default:
+                authViewModel.errorMessage = "Apple Sign-In failed: \(error.localizedDescription)"
+            }
         }
     }
 
