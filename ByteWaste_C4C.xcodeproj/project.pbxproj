@@ -15,9 +15,22 @@
 		B89C2F042F37B82000A07D0E /* ByteWaste_C4C.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ByteWaste_C4C.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		B8A065502F3872B30004E49F /* Exceptions for "ByteWaste_C4C" folder in "Copy Bundle Resources" phase from "ByteWaste_C4C" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = B89C2F022F37B82000A07D0E /* Resources */;
+			membershipExceptions = (
+				Config.swift,
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B89C2F062F37B82000A07D0E /* ByteWaste_C4C */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B8A065502F3872B30004E49F /* Exceptions for "ByteWaste_C4C" folder in "Copy Bundle Resources" phase from "ByteWaste_C4C" target */,
+			);
 			path = ByteWaste_C4C;
 			sourceTree = "<group>";
 		};
