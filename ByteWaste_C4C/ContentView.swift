@@ -103,6 +103,14 @@ struct ContentView: View {
         .onChange(of: pantryViewModel.isPresentingScannerSheet) { oldValue, newValue in
             print("📸 isPresentingScannerSheet changed: \(oldValue) -> \(newValue)")
         }
+        .onChange(of: selectedTab) { _, _ in
+            // Close add menu when switching tabs
+            if showAddMenu {
+                withAnimation {
+                    showAddMenu = false
+                }
+            }
+        }
         .onChange(of: pantryViewModel.items) { _, newItems in
             Task {
                 await recipeViewModel.generateRecipesIfNeeded(pantryItems: newItems)

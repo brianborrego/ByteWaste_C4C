@@ -74,6 +74,7 @@ struct RecipeListView: View {
                             .refreshable {
                                 await viewModel.refreshRecipes()
                             }
+                            .tint(.black) // Darker refresh spinner
                             .listStyle(.plain)
                             .scrollContentBackground(.hidden)
                             .background(Color.clear)
