@@ -191,6 +191,12 @@ struct ShoppingListView: View {
                         .textCase(nil)
                 }
             }
+
+            // Bottom spacer so tab bar doesn't cover last items
+            Color.clear
+                .frame(height: 100)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)

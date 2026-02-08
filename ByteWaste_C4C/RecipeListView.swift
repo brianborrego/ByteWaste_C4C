@@ -70,6 +70,12 @@ struct RecipeListView: View {
                                         viewModel.deleteRecipe(viewModel.recipes[index])
                                     }
                                 }
+
+                                // Bottom spacer so tab bar doesn't cover last items
+                                Color.clear
+                                    .frame(height: 100)
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
                             }
                             .refreshable {
                                 await viewModel.refreshRecipes()
@@ -356,6 +362,7 @@ struct RecipeDetailView: View {
                         }
                     }
                     .padding()
+                    .padding(.bottom, 100)
                 }
             }
         }
