@@ -32,7 +32,8 @@ struct PantryView: View {
                 }
             }
             .sheet(isPresented: $model.isPresentingScannerSheet) {
-                BarcodeScannerSheetView(viewModel: model)
+                // Use the new Smart Scanner instead of the basic barcode scanner
+                SmartScannerSheetView(viewModel: model)
             }
         }
     }

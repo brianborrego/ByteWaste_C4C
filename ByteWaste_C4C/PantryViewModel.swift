@@ -139,6 +139,46 @@ class PantryViewModel: ObservableObject {
         }
     }
     
+    /// Add item from image classification with AI analysis
+    func addFromImageClassification(foodName: String) async {
+        await MainActor.run {
+            isAnalyzing = true
+            errorMessage = nil
+        }
+        
+        do {
+            let result = try await foodService.analyzeFoodFromImage(foodName: foodName)
+            
+            let newItem = PantryItem(
+                name: result.name,
+                storageLocation: result.recommendedStorage,
+                scanDate: Date(),
+                currentExpirationDate: result.expirationDate,
+                shelfLifeEstimates: result.shelfLifeEstimates,
+                edamamFoodId: result.edamamFoodId,
+                imageURL: result.imageURL,
+                category: result.category,
+                quantity: "1",
+                brand: result.brand,
+                notes: result.notes
+            )
+            
+            await MainActor.run {
+                items.append(newItem)
+                isAnalyzing = false
+                isPresentingScannerSheet = false
+                
+                // Print JSON for debugging
+                printItemJSON(newItem)
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                isAnalyzing = false
+            }
+        }
+    }
+    
     /// Print item as JSON
     func printItemJSON(_ item: PantryItem) {
         let encoder = JSONEncoder()

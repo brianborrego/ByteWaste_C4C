@@ -7,27 +7,43 @@
 
 import Foundation
 
-// MARK: - Configuration (internal to this file)
+// MARK: - Configuration (uses Xcode Environment Variables)
 fileprivate struct APIConfig {
-    // Prefer Scheme Environment Variables; fall back to Info.plist if provided
-    private static func value(for key: String) -> String {
-        if let env = ProcessInfo.processInfo.environment[key], !env.isEmpty {
+    // Get value from Xcode Environment Variables, with Config.swift as fallback
+    private static func value(envKey: String, fallback: String) -> String {
+        // First, check Xcode environment variables
+        if let env = ProcessInfo.processInfo.environment[envKey], !env.isEmpty {
             return env
         }
-        if let plist = Bundle.main.object(forInfoDictionaryKey: key) as? String, !plist.isEmpty {
+        // Fall back to Config.swift if environment variable not set
+        if !fallback.isEmpty {
+            return fallback
+        }
+        // Last resort: check Info.plist
+        if let plist = Bundle.main.object(forInfoDictionaryKey: envKey) as? String, !plist.isEmpty {
             return plist
         }
         return ""
     }
 
     // Edamam Food Database API
-    static var EDAMAM_BASE_URL: String { value(for: "EDAMAM_BASE_URL") }
-    static var FOOD_APP_ID: String { value(for: "FOOD_APP_ID") }
-    static var FOOD_APP_KEY: String { value(for: "FOOD_APP_KEY") }
+    static var EDAMAM_BASE_URL: String { 
+        value(envKey: "EDAMAM_BASE_URL", fallback: Config.EDAMAM_BASE_URL)
+    }
+    static var FOOD_APP_ID: String { 
+        value(envKey: "FOOD_APP_ID", fallback: Config.FOOD_APP_ID)
+    }
+    static var FOOD_APP_KEY: String { 
+        value(envKey: "FOOD_APP_KEY", fallback: Config.FOOD_APP_KEY)
+    }
 
     // Navigator AI API
-    static var NAVIGATOR_API_ENDPOINT: String { value(for: "NAVIGATOR_API_ENDPOINT") }
-    static var NAVIGATOR_API_KEY: String { value(for: "NAVIGATOR_API_KEY") }
+    static var NAVIGATOR_API_ENDPOINT: String { 
+        value(envKey: "NAVIGATOR_API_ENDPOINT", fallback: Config.navigatorAPIEndpoint)
+    }
+    static var NAVIGATOR_API_KEY: String { 
+        value(envKey: "NAVIGATOR_API_KEY", fallback: Config.navigatorAPIKey)
+    }
 }
 
 // MARK: - Models
@@ -343,6 +359,107 @@ public class FoodExpirationService {
             notes: aiResponse.notes,
             expirationDate: expirationDate
         )
+    }
+    
+    /// Analyze food from image classification (no barcode)
+    public func analyzeFoodFromImage(foodName: String) async throws -> FoodAnalysisResult {
+        // Step 1: Search Edamam for the food name
+        let food = try await searchFoodByName(name: foodName)
+        
+        // Step 2: Get AI shelf life estimates
+        let aiResponse = try await estimateShelfLife(food: food)
+        
+        // Step 3: Determine storage location
+        let storageLocation: StorageLocation
+        switch aiResponse.recommended_storage.lowercased() {
+        case "fridge":
+            storageLocation = .fridge
+        case "freezer":
+            storageLocation = .freezer
+        case "shelf":
+            storageLocation = .shelf
+        default:
+            storageLocation = .shelf
+        }
+        
+        // Step 4: Create shelf life estimates
+        let shelfLifeEstimates = ShelfLifeEstimates(
+            fridge: aiResponse.fridge_days,
+            freezer: aiResponse.freezer_days,
+            shelf: aiResponse.shelf_days
+        )
+        
+        // Step 5: Calculate expiration date based on recommended storage
+        let daysToAdd: Int
+        switch storageLocation {
+        case .fridge:
+            daysToAdd = aiResponse.fridge_days
+        case .freezer:
+            daysToAdd = aiResponse.freezer_days
+        case .shelf:
+            daysToAdd = aiResponse.shelf_days
+        }
+        
+        let expirationDate = Calendar.current.date(byAdding: .day, value: daysToAdd, to: Date()) ?? Date()
+        
+        // Step 6: Return result
+        return FoodAnalysisResult(
+            name: food.label,
+            brand: food.brand,
+            category: food.categoryLabel ?? food.category,
+            imageURL: food.image,
+            edamamFoodId: food.foodId,
+            shelfLifeEstimates: shelfLifeEstimates,
+            recommendedStorage: storageLocation,
+            notes: aiResponse.notes,
+            expirationDate: expirationDate
+        )
+    }
+    
+    /// Search for food by name (for image classification results)
+    private func searchFoodByName(name: String) async throws -> EdamamFood {
+        // Validate configuration
+        guard !APIConfig.EDAMAM_BASE_URL.isEmpty,
+              !APIConfig.FOOD_APP_ID.isEmpty,
+              !APIConfig.FOOD_APP_KEY.isEmpty else {
+            throw ServiceError.apiError("Missing Edamam configuration")
+        }
+        
+        var components = URLComponents(string: "\(APIConfig.EDAMAM_BASE_URL)/api/food-database/v2/parser")
+        
+        // Clean up the food name (remove technical classification terms)
+        let cleanedName = name
+            .replacingOccurrences(of: "_", with: " ")
+            .components(separatedBy: ",").first ?? name
+        
+        components?.queryItems = [
+            URLQueryItem(name: "app_id", value: APIConfig.FOOD_APP_ID),
+            URLQueryItem(name: "app_key", value: APIConfig.FOOD_APP_KEY),
+            URLQueryItem(name: "ingr", value: cleanedName),
+            URLQueryItem(name: "nutrition-type", value: "logging")
+        ]
+        
+        guard let url = components?.url else {
+            throw ServiceError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw ServiceError.apiError("Edamam API returned error")
+        }
+        
+        let decoder = JSONDecoder()
+        let edamamResponse = try decoder.decode(EdamamResponse.self, from: data)
+        
+        // Try parsed items first, then hints
+        if let parsedFood = edamamResponse.parsed?.first?.food {
+            return parsedFood
+        } else if let hintFood = edamamResponse.hints?.first?.food {
+            return hintFood
+        } else {
+            throw ServiceError.noResults
+        }
     }
 }
 
