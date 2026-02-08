@@ -16,4 +16,11 @@ struct AppColors {
     // Gradients
     static let gradientBrownTop = "#712E1E"
     static let gradientBrownBottom = "#3C1810"
+    
+    // Disposal
+    static let disposalThrownAwayRed = "F33333"
+    static let disposalUsedPartiallyYellow = "ffe311"
+    
+
+
 }

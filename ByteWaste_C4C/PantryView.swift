@@ -98,7 +98,7 @@ struct PantryView: View {
                     }
                 }
             }
-            .navigationBarHidden(true)
+            .toolbar(.hidden, for: .navigationBar)
             .task {
                 await viewModel.loadItems()
             }
@@ -188,8 +188,7 @@ private struct StorageSectionView: View {
                     .environmentObject(authViewModel)
             }
         }
-    }
-}
+    
 
 // MARK: - Pantry Item Square Card
 private struct PantryItemSquareCard: View {

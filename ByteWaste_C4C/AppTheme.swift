@@ -21,8 +21,8 @@ extension Color {
     static let appIconGray = Color(hex: AppColors.iconGray)
 
     // Disposal colors
-    static let appDisposalRed = Color(hex: Config.disposalThrownAwayRed)
-    static let appDisposalYellow = Color(hex: Config.disposalUsedPartiallyYellow)
+    static let appDisposalRed = Color(hex: AppColors.disposalThrownAwayRed)
+    static let appDisposalYellow = Color(hex: AppColors.disposalUsedPartiallyYellow)
 
     // Gradients
     static let appGradientTop = Color(hex: AppColors.gradientBrownTop)

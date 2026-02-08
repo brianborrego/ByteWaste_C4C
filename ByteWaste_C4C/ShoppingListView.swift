@@ -85,14 +85,6 @@ struct ShoppingListView: View {
                             .background(Color.red)
                             .cornerRadius(16)
                         }
-
-                        Button {
-                            showingAddSheet = true
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(Color.appPrimaryGreen)
-                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20)
@@ -409,16 +401,6 @@ struct ShoppingListItemRow: View {
             }
 
             Spacer()
-
-            // Delete Button
-            Button(role: .destructive) {
-                onDelete()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.red.opacity(0.8))
-            }
-            .buttonStyle(.plain)
         }
         .padding(16)
         .cardStyle()
