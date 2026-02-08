@@ -19,12 +19,14 @@ struct ContentView: View {
             // Persistent cream background (prevents flashing)
             Color.appCream.ignoresSafeArea()
             VStack(spacing: 0 ){
+            VStack(spacing: 0 ){
                 // Tab content with smoother transition
                 ZStack {
                     if selectedTab == .pantry {
                         PantryView(viewModel: pantryViewModel)
                             .transition(.opacity)
                     } else if selectedTab == .recipes {
+                        RecipeListView(viewModel: recipeViewModel)
                         RecipeListView(viewModel: recipeViewModel)
                             .transition(.opacity)
                     } else if selectedTab == .shopping {

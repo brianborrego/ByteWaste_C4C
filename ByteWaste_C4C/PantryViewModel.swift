@@ -373,6 +373,7 @@ class PantryViewModel: ObservableObject {
                 isAnalyzing = false
                 isPresentingScannerSheet = false
                 onItemAdded?(items)
+                onItemAdded?(items)
             }
         } catch {
             // Check if error is "no results" or 404 - if so, open manual entry with barcode pre-filled
