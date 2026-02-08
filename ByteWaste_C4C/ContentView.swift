@@ -12,6 +12,7 @@ struct ContentView: View {
     @StateObject private var recipeViewModel = RecipeViewModel()
     @State private var selectedTab: AppTab = .pantry
     @State private var showAddMenu = false
+    @State private var triggerShoppingAdd = false
     
     var body: some View {
         ZStack {
@@ -27,7 +28,7 @@ struct ContentView: View {
                         RecipeListView(viewModel: recipeViewModel)
                             .transition(.opacity)
                     } else if selectedTab == .shopping {
-                        ShoppingListView()
+                        ShoppingListView(triggerAdd: $triggerShoppingAdd)
                             .transition(.opacity)
                     } else if selectedTab == .sustainability {
                         SustainabilityView()
@@ -65,6 +66,13 @@ struct ContentView: View {
                         print("✏️ ContentView: Setting isPresentingAddSheet = true")
                         pantryViewModel.isPresentingAddSheet = true
                         print("✏️ ContentView: isPresentingAddSheet = \(pantryViewModel.isPresentingAddSheet)")
+                    },
+                    onShoppingAddTapped: {
+                        print("🛒 ContentView: Switching to shopping tab and triggering add")
+                        selectedTab = .shopping
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            triggerShoppingAdd = true
+                        }
                     }
                 )
             }

@@ -49,6 +49,7 @@ struct ShoppingListView: View {
     @StateObject private var viewModel = ShoppingListViewModel()
     @State private var showingAddSheet = false
     @State private var newItemName = ""
+    @Binding var triggerAdd: Bool
 
     var body: some View {
         NavigationStack {
@@ -113,6 +114,12 @@ struct ShoppingListView: View {
             }
             .task {
                 await viewModel.loadItems()
+            }
+            .onChange(of: triggerAdd) { _, newValue in
+                if newValue {
+                    showingAddSheet = true
+                    triggerAdd = false
+                }
             }
             .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
                 Button("OK") {
@@ -418,5 +425,5 @@ struct ShoppingListItemRow: View {
 // MARK: - Preview
 
 #Preview {
-    ShoppingListView()
+    ShoppingListView(triggerAdd: .constant(false))
 }

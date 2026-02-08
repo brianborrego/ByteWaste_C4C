@@ -32,10 +32,16 @@ struct CustomTabBar: View {
     @Binding var showAddMenu: Bool
     let onScanTapped: () -> Void
     let onManualAddTapped: () -> Void
+    let onShoppingAddTapped: () -> Void
 
     var body: some View {
         ZStack {
-            // Main tab bar - floating icons with no background
+            // Opaque background bar with rounded edges
+            Color.appCream
+                .frame(height: 80)
+                .cornerRadius(20, corners: [.topLeft, .topRight])
+
+            // Main tab bar with icons
             HStack(spacing: 0) {
                 // Left tabs (Pantry, Recipes)
                 TabBarButton(tab: .pantry, selectedTab: $selectedTab)
@@ -77,38 +83,57 @@ struct CustomTabBar: View {
                     }
                     .offset(y: -32)
 
-                    // Expanded menu
+                    // Expanded menu with circular icon buttons in arch formation
                     if showAddMenu {
-                        VStack(spacing: 12) {
-                            AddMenuButton(
-                                icon: "barcode.viewfinder",
-                                title: "Scan",
-                                color: .appPrimaryGreen
-                            ) {
-                                print("🔍 Scan button tapped")
-                                withAnimation {
-                                    showAddMenu = false
-                                }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                    print("🔍 Calling onScanTapped()")
-                                    onScanTapped()
-                                }
-                            }
-
-                            AddMenuButton(
+                        HStack(spacing: 20) {
+                            // Add Manually button (left - slightly raised)
+                            CircularIconButton(
                                 icon: "plus.circle.fill",
-                                title: "Add Manually",
                                 color: .appPrimaryGreen
                             ) {
                                 print("➕ Add Manually button tapped")
                                 withAnimation {
                                     showAddMenu = false
                                 }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                DispatchQueue.main.asyncAfter(deadline: .now()) {
                                     print("➕ Calling onManualAddTapped()")
                                     onManualAddTapped()
                                 }
                             }
+                            .offset(y: -25)
+
+                            // Scan button (center - raised most)
+                            CircularIconButton(
+                                icon: "barcode.viewfinder",
+                                color: .appPrimaryGreen
+                            ) {
+                                print("🔍 Scan button tapped")
+                                withAnimation {
+                                    showAddMenu = false
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now()) {
+                                    print("🔍 Calling onScanTapped()")
+                                    onScanTapped()
+                                }
+                            }
+                            .offset(y: -50)
+
+
+                            // Shopping Cart button (right - slightly raised)
+                            CircularIconButton(
+                                icon: "cart.fill",
+                                color: .appPrimaryGreen
+                            ) {
+                                print("🛒 Shopping Cart button tapped")
+                                withAnimation {
+                                    showAddMenu = false
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now()) {
+                                    print("🛒 Calling onShoppingAddTapped()")
+                                    onShoppingAddTapped()
+                                }
+                            }
+                            .offset(y: -25)
                         }
                         .padding(.bottom, 120)
                         .transition(.scale.combined(with: .opacity))
@@ -139,28 +164,24 @@ private struct TabBarButton: View {
     }
 }
 
-// MARK: - Add Menu Button
-private struct AddMenuButton: View {
+// MARK: - Circular Icon Button
+private struct CircularIconButton: View {
     let icon: String
-    let title: String
     let color: Color
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 20))
+            ZStack {
+                Circle()
+                    .fill(color)
+                    .frame(width: 60, height: 60)
+                    .shadow(color: color.opacity(0.4), radius: 8, x: 0, y: 4)
 
-                Text(title)
-                    .font(.system(size: 16, weight: .medium))
+                Image(systemName: icon)
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundColor(.white)
             }
-            .foregroundColor(.white)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(color)
-            .cornerRadius(12)
-            .shadow(color: color.opacity(0.3), radius: 8, x: 0, y: 4)
         }
     }
 }
@@ -170,6 +191,7 @@ private struct AddMenuButton: View {
         selectedTab: .constant(.pantry),
         showAddMenu: .constant(false),
         onScanTapped: {},
-        onManualAddTapped: {}
+        onManualAddTapped: {},
+        onShoppingAddTapped: {}
     )
 }
