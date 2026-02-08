@@ -8,24 +8,22 @@
 import SwiftUI
 
 struct ContentView: View {
+    @StateObject private var recipeViewModel = RecipeViewModel()
     @State private var selectedTab: AppTab = .pantry
     @State private var showAddMenu = false
     @StateObject private var pantryViewModel = PantryViewModel()
-
     var body: some View {
         ZStack {
             // Persistent cream background (prevents flashing)
             Color.appCream.ignoresSafeArea()
-
-            // Main content area
-            VStack(spacing: 0) {
+            VStack(spacing: 0 ){
                 // Tab content with smoother transition
                 ZStack {
                     if selectedTab == .pantry {
                         PantryView(viewModel: pantryViewModel)
                             .transition(.opacity)
                     } else if selectedTab == .recipes {
-                        RecipesPlaceholderView()
+                        RecipeListView(viewModel: recipeViewModel)
                             .transition(.opacity)
                     } else if selectedTab == .shopping {
                         ShoppingListView()
@@ -39,7 +37,6 @@ struct ContentView: View {
 
                 Spacer(minLength: 0)
             }
-
             // Dim background when add menu is open (MUST be before tab bar in Z-order)
             if showAddMenu {
                 Color.black.opacity(0.3)
@@ -52,7 +49,6 @@ struct ContentView: View {
                     .transition(.opacity)
                     .zIndex(1)
             }
-
             // Custom tab bar overlay (MUST be on top with higher zIndex)
             VStack {
                 Spacer()
@@ -95,36 +91,10 @@ struct ContentView: View {
         .onChange(of: pantryViewModel.isPresentingScannerSheet) { oldValue, newValue in
             print("📸 isPresentingScannerSheet changed: \(oldValue) -> \(newValue)")
         }
-    }
-}
-
-// MARK: - Placeholder Views
-private struct RecipesPlaceholderView: View {
-    var body: some View {
-        ZStack {
-            Color.appCream.ignoresSafeArea()
-
-            VStack(spacing: 20) {
-                Image(systemName: "book.fill")
-                    .font(.system(size: 64))
-                    .foregroundColor(.appPrimaryGreen)
-
-                Text("Recipes")
-                    .font(.system(size: 32, weight: .bold))
-                    .foregroundStyle(.linearGradient(
-                        colors: [.appGradientTop, .appGradientBottom],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ))
-
-                Text("Coming Soon")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+        .onChange(of: pantryViewModel.items) { _, newItems in
+            Task {
+                await recipeViewModel.generateRecipesIfNeeded(pantryItems: newItems)
             }
-        }
-    }
-}
-
         }
     }
 }

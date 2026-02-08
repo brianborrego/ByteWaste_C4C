@@ -196,6 +196,7 @@ public struct FoodAnalysisResult {
     public let notes: String?
     public let sustainabilityNotes: String?
     public let expirationDate: Date
+    public let genericName: String?
 }
 
 // MARK: - Service
@@ -622,7 +623,8 @@ public class FoodExpirationService {
             recommendedStorage: storageLocation,
             notes: aiResponse.notes,
             sustainabilityNotes: aiResponse.sustainability_notes,
-            expirationDate: expirationDate
+            expirationDate: expirationDate,
+            genericName: aiResponse.generic_name
         )
     }
     
@@ -687,7 +689,8 @@ public class FoodExpirationService {
             recommendedStorage: storageLocation,
             notes: aiResponse.notes,
             sustainabilityNotes: aiResponse.sustainability_notes,
-            expirationDate: expirationDate
+            expirationDate: expirationDate,
+            genericName: aiResponse.generic_name
         )
     }
     

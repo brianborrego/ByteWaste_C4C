@@ -4,10 +4,6 @@ struct PantryView: View {
     @ObservedObject var viewModel: PantryViewModel
     @State private var isEditMode = false
 
-    init(viewModel: PantryViewModel) {
-        self.viewModel = viewModel
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {

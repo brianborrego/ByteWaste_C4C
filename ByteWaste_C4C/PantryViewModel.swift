@@ -32,6 +32,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
     var brand: String?
     var notes: String?
     var sustainabilityNotes: String?
+    var genericName: String?
 
     // Amount tracking
     var amountRemaining: Double  // 0.0 to 1.0 (percentage)
@@ -47,6 +48,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
         case edamamFoodId = "edamam_food_id"
         case imageURL = "image_url"
         case sustainabilityNotes = "sustainability_notes"
+        case genericName = "generic_name"
         case amountRemaining = "amount_remaining"
         case initialQuantityAmount = "initial_quantity_amount"
     }
@@ -70,6 +72,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
         brand = try? container.decode(String.self, forKey: .brand)
         notes = try? container.decode(String.self, forKey: .notes)
         sustainabilityNotes = try? container.decode(String.self, forKey: .sustainabilityNotes)
+        genericName = try? container.decode(String.self, forKey: .genericName)
         initialQuantityAmount = try? container.decode(Double.self, forKey: .initialQuantityAmount)
         barcode = try? container.decode(String.self, forKey: .barcode)
 
@@ -124,6 +127,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
         brand: String? = nil,
         notes: String? = nil,
         sustainabilityNotes: String? = nil,
+        genericName: String? = nil,
         amountRemaining: Double = 1.0,
         initialQuantityAmount: Double? = nil
     ) {
@@ -141,6 +145,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
         self.brand = brand
         self.notes = notes
         self.sustainabilityNotes = sustainabilityNotes
+        self.genericName = genericName
         self.amountRemaining = amountRemaining
         self.initialQuantityAmount = initialQuantityAmount
     }
@@ -155,6 +160,8 @@ class PantryViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var barcodeForManualEntry: String?  // Barcode to pre-fill in manual entry
+
+    var onItemAdded: (([PantryItem]) -> Void)?
 
     private let foodService = FoodExpirationService()
     private let supabase = SupabaseService.shared
@@ -185,6 +192,7 @@ class PantryViewModel: ObservableObject {
     func add(_ item: PantryItem) {
         items.append(item)
         isPresentingAddSheet = false
+        onItemAdded?(items)
         Task {
             do {
                 try await supabase.insertItem(item)
@@ -256,7 +264,8 @@ class PantryViewModel: ObservableObject {
                 quantity: "1",
                 brand: result.brand,
                 notes: result.notes,
-                sustainabilityNotes: result.sustainabilityNotes
+                sustainabilityNotes: result.sustainabilityNotes,
+                genericName: result.genericName
             )
 
             // Save to Supabase
@@ -266,6 +275,7 @@ class PantryViewModel: ObservableObject {
                 items.append(newItem)
                 isAnalyzing = false
                 isPresentingScannerSheet = false
+                onItemAdded?(items)
             }
         } catch {
             // Check if error is "no results" or 404 - if so, open manual entry with barcode pre-filled
@@ -331,7 +341,8 @@ class PantryViewModel: ObservableObject {
                 quantity: "1",
                 brand: result.brand,
                 notes: result.notes,
-                sustainabilityNotes: result.sustainabilityNotes
+                sustainabilityNotes: result.sustainabilityNotes,
+                genericName: result.genericName
             )
 
             // Save to Supabase
@@ -341,6 +352,7 @@ class PantryViewModel: ObservableObject {
                 items.append(newItem)
                 isAnalyzing = false
                 isPresentingScannerSheet = false
+                onItemAdded?(items)
             }
         } catch {
             await MainActor.run {
