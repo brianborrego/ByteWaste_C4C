@@ -12,72 +12,95 @@ struct RecipeListView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if viewModel.isLoading {
-                    ProgressView("Loading recipes...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if viewModel.recipes.isEmpty {
-                    ScrollView {
+            ZStack {
+                // Cream background
+                Color.appCream.ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    // Custom gradient title
+                    HStack {
+                        Text("Recipes")
+                            .font(.system(size: 36, weight: .bold))
+                            .foregroundStyle(.linearGradient(
+                                colors: [.appGradientTop, .appGradientBottom],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ))
+
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 12)
+
+                    if viewModel.isLoading {
+                        Spacer()
+                        ProgressView("Loading recipes...")
+                        Spacer()
+                    } else if viewModel.recipes.isEmpty {
+                        Spacer()
                         VStack(spacing: 16) {
                             Image(systemName: "book.fill")
-                                .font(.system(size: 60))
-                                .foregroundColor(.gray)
+                                .font(.system(size: 64))
+                                .foregroundColor(.appIconGray.opacity(0.5))
                             Text("No Recipes Yet")
-                                .font(.headline)
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.appIconGray)
                             Text("Add items to your pantry to discover recipes using your ingredients.\nPull down to refresh.")
                                 .multilineTextAlignment(.center)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.appIconGray.opacity(0.7))
                                 .padding(.horizontal)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 100)
-                    }
-                    .refreshable {
-                        await viewModel.refreshRecipes()
-                    }
-                    .background(Color(.systemBackground))
-                } else {
-                    ZStack {
-                        List {
-                            ForEach(viewModel.recipes) { recipe in
-                                NavigationLink(destination: RecipeDetailView(recipe: recipe)) {
-                                    RecipeRowView(recipe: recipe)
+                        Spacer()
+                    } else {
+                        ZStack {
+                            List {
+                                ForEach(viewModel.recipes) { recipe in
+                                    NavigationLink(destination: RecipeDetailView(recipe: recipe)) {
+                                        RecipeRowView(recipe: recipe)
+                                    }
+                                    .listRowBackground(Color.clear)
+                                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                    .listRowSeparator(.hidden)
+                                }
+                                .onDelete { indexSet in
+                                    for index in indexSet {
+                                        viewModel.deleteRecipe(viewModel.recipes[index])
+                                    }
                                 }
                             }
-                            .onDelete { indexSet in
-                                for index in indexSet {
-                                    viewModel.deleteRecipe(viewModel.recipes[index])
-                                }
+                            .refreshable {
+                                await viewModel.refreshRecipes()
                             }
-                        }
-                        .refreshable {
-                            await viewModel.refreshRecipes()
-                        }
-                        .listStyle(.plain)
+                            .listStyle(.plain)
+                            .scrollContentBackground(.hidden)
+                            .background(Color.clear)
 
-                        // Loading overlay when generating new recipes
-                        if viewModel.isGenerating {
-                            ZStack {
-                                Color.black.opacity(0.3)
-                                    .ignoresSafeArea()
+                            // Loading overlay when generating new recipes
+                            if viewModel.isGenerating {
+                                ZStack {
+                                    Color.black.opacity(0.3)
+                                        .ignoresSafeArea()
 
-                                VStack(spacing: 16) {
-                                    ProgressView()
-                                        .scaleEffect(1.3)
-                                    Text("Finding recipes...")
-                                        .font(.headline)
-                                        .foregroundColor(.white)
+                                    VStack(spacing: 16) {
+                                        ProgressView()
+                                            .scaleEffect(1.3)
+                                        Text("Finding recipes...")
+                                            .font(.headline)
+                                            .foregroundColor(.white)
+                                    }
+                                    .padding()
+                                    .background(Color.appCream)
+                                    .cornerRadius(12)
                                 }
-                                .padding()
-                                .background(Color(.systemBackground))
-                                .cornerRadius(12)
                             }
                         }
                     }
                 }
             }
-            .navigationTitle("Recipes")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarHidden(true)
             .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
                 Button("OK") {
                     viewModel.errorMessage = nil
@@ -110,34 +133,34 @@ struct RecipeRowView: View {
                         ProgressView()
                     case .failure:
                         Image(systemName: "photo")
-                            .foregroundColor(.gray)
+                            .foregroundColor(.appIconGray)
                     @unknown default:
                         EmptyView()
                     }
                 }
-                .frame(width: 80, height: 80)
-                .cornerRadius(8)
-                .clipped()
+                .frame(width: 60, height: 60)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
             } else {
-                Image(systemName: "fork.knife")
-                    .font(.system(size: 32))
-                    .frame(width: 80, height: 80)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
-                    .foregroundColor(.gray)
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.appIconGray.opacity(0.15))
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Image(systemName: "fork.knife")
+                            .font(.system(size: 24))
+                            .foregroundColor(.appIconGray.opacity(0.5))
+                    )
             }
 
             // Recipe info
             VStack(alignment: .leading, spacing: 6) {
                 Text(recipe.label)
-                    .font(.headline)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.black)
                     .lineLimit(2)
 
                 Text(recipe.subtitle)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-
+                    .font(.system(size: 14))
+                    .foregroundColor(.appIconGray)
 
                 // Pantry match indicator
                 if !recipe.pantryItemsUsed.isEmpty {
@@ -145,8 +168,8 @@ struct RecipeRowView: View {
                         Image(systemName: "checkmark.circle.fill")
                         Text("\(recipe.pantryItemsUsed.count) ingredients")
                     }
-                    .font(.caption2)
-                    .foregroundColor(.green)
+                    .font(.system(size: 12))
+                    .foregroundColor(.appPrimaryGreen)
                 }
             }
 
@@ -154,9 +177,11 @@ struct RecipeRowView: View {
 
             // Source indicator
             Image(systemName: "chevron.right")
-                .foregroundColor(.gray)
+                .font(.system(size: 14))
+                .foregroundColor(.appIconGray.opacity(0.5))
         }
-        .padding(.vertical, 4)
+        .padding(16)
+        .cardStyle()
     }
 }
 
@@ -167,108 +192,98 @@ struct RecipeDetailView: View {
     @Environment(\.openURL) var openURL
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                // Hero image
-                if let imageURL = recipe.image, let url = URL(string: imageURL) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .empty:
-                            ProgressView()
-                                .frame(height: 250)
-                        case .failure:
-                            Image(systemName: "photo")
-                                .font(.system(size: 48))
-                                .foregroundColor(.gray)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 250)
-                                .background(Color(.systemGray6))
-                        @unknown default:
-                            EmptyView()
-                        }
-                    }
-                    .frame(height: 250)
-                    .clipped()
-                }
+        ZStack {
+            // Cream background
+            Color.appCream.ignoresSafeArea()
 
+            ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    // Title
-                    Text(recipe.label)
-                        .font(.title2)
-                        .fontWeight(.bold)
-
-                    // Metadata
-                    HStack(spacing: 16) {
-                        if let yield = recipe.yield {
-                            VStack(spacing: 4) {
-                                Image(systemName: "person.2.fill")
-                                    .foregroundColor(.blue)
-                                Text("\(yield)")
-                                    .font(.caption)
+                    // Hero image
+                    if let imageURL = recipe.image, let url = URL(string: imageURL) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            case .empty:
+                                ProgressView()
+                                    .frame(height: 250)
+                            case .failure:
+                                Image(systemName: "photo")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.appIconGray)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 250)
+                                    .background(Color.appIconGray.opacity(0.15))
+                            @unknown default:
+                                EmptyView()
                             }
                         }
-
-
-
-                        if let source = recipe.sourcePublisher {
-                            VStack(spacing: 4) {
-                                Image(systemName: "globe")
-                                    .foregroundColor(.green)
-                                Text(source)
-                                    .font(.caption)
-                                    .lineLimit(1)
-                            }
-                        }
-
-                        Spacer()
+                        .frame(height: 250)
+                        .clipped()
                     }
 
-                    Divider()
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Title
+                        Text(recipe.label)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.linearGradient(
+                                colors: [.appGradientTop, .appGradientBottom],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ))
 
-                    // Ingredients
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Ingredients")
-                            .font(.headline)
-
-                        VStack(alignment: .leading, spacing: 6) {
-                            ForEach(recipe.ingredientLines, id: \.self) { ingredient in
-                                HStack(spacing: 8) {
-                                    Image(systemName: "checkmark.circle")
-                                        .foregroundColor(.green)
+                        // Metadata
+                        HStack(spacing: 16) {
+                            if let yield = recipe.yield {
+                                VStack(spacing: 4) {
+                                    Image(systemName: "person.2.fill")
+                                        .foregroundColor(.appPrimaryGreen)
+                                    Text("\(yield)")
                                         .font(.caption)
-
-                                    Text(ingredient)
-                                        .font(.body)
-                                        .lineLimit(2)
-
-                                    Spacer()
+                                        .foregroundColor(.appIconGray)
                                 }
                             }
+
+                            if let source = recipe.sourcePublisher {
+                                VStack(spacing: 4) {
+                                    Image(systemName: "globe")
+                                        .foregroundColor(.appPrimaryGreen)
+                                    Text(source)
+                                        .font(.caption)
+                                        .foregroundColor(.appIconGray)
+                                        .lineLimit(1)
+                                }
+                            }
+
+                            Spacer()
                         }
-                    }
 
-                    Divider()
+                        Divider()
 
-                    // Pantry items used
-                    if !recipe.pantryItemsUsed.isEmpty {
+                        // Ingredients
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Your Pantry Items Used")
+                            Text("Ingredients")
                                 .font(.headline)
+                                .foregroundStyle(.linearGradient(
+                                    colors: [.appGradientTop, .appGradientBottom],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ))
 
                             VStack(alignment: .leading, spacing: 6) {
-                                ForEach(recipe.pantryItemsUsed, id: \.self) { item in
+                                ForEach(recipe.ingredientLines, id: \.self) { ingredient in
                                     HStack(spacing: 8) {
-                                        Image(systemName: "star.fill")
-                                            .foregroundColor(.yellow)
+                                        Image(systemName: "checkmark.circle")
+                                            .foregroundColor(.appPrimaryGreen)
                                             .font(.caption)
 
-                                        Text(item)
-                                            .font(.subheadline)
-                                            .fontWeight(.semibold)
+                                        Text(ingredient)
+                                            .font(.body)
+                                            .foregroundColor(.black)
+                                            .lineLimit(2)
 
                                         Spacer()
                                     }
@@ -277,33 +292,78 @@ struct RecipeDetailView: View {
                         }
 
                         Divider()
-                    }
 
-                    // View Full Recipe button
-                    if let sourceUrl = recipe.sourceUrl, let url = URL(string: sourceUrl) {
-                        Link(destination: url) {
-                            HStack {
-                                Image(systemName: "safari.fill")
-                                Text("View Full Recipe")
-                                    .fontWeight(.semibold)
-                                Spacer()
-                                Image(systemName: "arrow.up.right")
+                        // Pantry items used
+                        if !recipe.pantryItemsUsed.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Your Pantry Items Used")
+                                    .font(.headline)
+                                    .foregroundStyle(.linearGradient(
+                                        colors: [.appGradientTop, .appGradientBottom],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    ))
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    ForEach(recipe.pantryItemsUsed, id: \.self) { item in
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "star.fill")
+                                                .foregroundColor(.yellow)
+                                                .font(.caption)
+
+                                            Text(item)
+                                                .font(.subheadline)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.black)
+
+                                            Spacer()
+                                        }
+                                    }
+                                }
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
-                        }
-                    }
 
-                    Spacer()
+                            Divider()
+                        }
+
+                        // View Full Recipe button
+                        if let sourceUrl = recipe.sourceUrl, let url = URL(string: sourceUrl) {
+                            Link(destination: url) {
+                                HStack {
+                                    Image(systemName: "safari.fill")
+                                    Text("View Full Recipe")
+                                        .fontWeight(.semibold)
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.appPrimaryGreen)
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
+                            }
+                        }
+
+                        Spacer()
+                    }
+                    .padding()
                 }
-                .padding()
             }
         }
-        .navigationTitle("Recipe")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Color.appCream, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Recipe Details")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundStyle(.linearGradient(
+                        colors: [.appGradientTop, .appGradientBottom],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ))
+            }
+        }
     }
 }
 
