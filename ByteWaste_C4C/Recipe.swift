@@ -17,6 +17,7 @@ struct Recipe: Identifiable, Codable {
     var cuisineType: [String]?
     var mealType: [String]?
     var pantryItemsUsed: [String]
+    var expiringItemsUsed: [String]
     var generatedFrom: [String]
     var createdAt: Date?
     var userId: UUID?
@@ -30,6 +31,7 @@ struct Recipe: Identifiable, Codable {
         case cuisineType = "cuisine_type"
         case mealType = "meal_type"
         case pantryItemsUsed = "pantry_items_used"
+        case expiringItemsUsed = "expiring_items_used"
         case generatedFrom = "generated_from"
         case createdAt = "created_at"
         case userId = "user_id"
@@ -50,6 +52,7 @@ struct Recipe: Identifiable, Codable {
         cuisineType = try? container.decode([String].self, forKey: .cuisineType)
         mealType = try? container.decode([String].self, forKey: .mealType)
         pantryItemsUsed = (try? container.decode([String].self, forKey: .pantryItemsUsed)) ?? []
+        expiringItemsUsed = (try? container.decode([String].self, forKey: .expiringItemsUsed)) ?? []
         generatedFrom = (try? container.decode([String].self, forKey: .generatedFrom)) ?? []
         createdAt = try? container.decode(Date.self, forKey: .createdAt)
         userId = try? container.decode(UUID.self, forKey: .userId)
@@ -67,6 +70,7 @@ struct Recipe: Identifiable, Codable {
         cuisineType: [String]? = nil,
         mealType: [String]? = nil,
         pantryItemsUsed: [String],
+        expiringItemsUsed: [String] = [],
         generatedFrom: [String],
         createdAt: Date? = nil,
         userId: UUID? = nil
@@ -82,6 +86,7 @@ struct Recipe: Identifiable, Codable {
         self.cuisineType = cuisineType
         self.mealType = mealType
         self.pantryItemsUsed = pantryItemsUsed
+        self.expiringItemsUsed = expiringItemsUsed
         self.generatedFrom = generatedFrom
         self.createdAt = createdAt
         self.userId = userId

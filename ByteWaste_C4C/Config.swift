@@ -23,4 +23,7 @@ struct Config {
     // Navigator AI API
     static let navigatorAPIEndpoint = "https://api.ai.it.ufl.edu/v1"
     static let navigatorAPIKey = "sk-AUydy3z6VlN-xwA0cILqRw"
+
+    // Development Mode
+    static let isDevMode = true  // Set to false for production
 }

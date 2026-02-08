@@ -35,6 +35,98 @@ class RecipeViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Limit recipes per ingredient
+
+    /// Limit recipes per ingredient to avoid overloading with one ingredient
+    private func limitRecipesPerIngredient(_ recipes: [Recipe], maxPerIngredient: Int = 5) -> [Recipe] {
+        let excludedStaples = Set(["water", "salt", "pepper", "sugar"])
+
+        func getBaseIngredient(_ ingredient: String) -> String {
+            let lower = ingredient.lowercased()
+            let modifiers = ["fresh", "frozen", "canned", "dried", "cooked", "raw", "organic",
+                           "plain", "greek", "whole", "skim", "low-fat", "fat-free", "unsweetened",
+                           "sweetened", "vanilla", "strawberry", "chocolate", "extra", "virgin",
+                           "light", "heavy", "sour", "sweet", "spicy", "mild"]
+            var base = lower
+            for modifier in modifiers {
+                base = base.replacingOccurrences(of: "\(modifier) ", with: "")
+                base = base.replacingOccurrences(of: " \(modifier)", with: "")
+            }
+            return base.trimmingCharacters(in: .whitespaces)
+        }
+
+        var baseIngredientGroups: [String: Set<String>] = [:]
+        let allIngredients = Set(recipes.flatMap { $0.pantryItemsUsed })
+
+        for ingredient in allIngredients where !excludedStaples.contains(ingredient.lowercased()) {
+            let base = getBaseIngredient(ingredient)
+            if baseIngredientGroups[base] == nil {
+                baseIngredientGroups[base] = []
+            }
+            baseIngredientGroups[base]?.insert(ingredient)
+        }
+
+        var recipesToKeep = Set<UUID>()
+
+        for (_, ingredientVariations) in baseIngredientGroups {
+            let recipesUsingIngredient = recipes.filter { recipe in
+                recipe.pantryItemsUsed.contains { pantryItem in
+                    ingredientVariations.contains { variation in
+                        pantryItem.lowercased() == variation.lowercased()
+                    }
+                }
+            }
+
+            let topRecipes = recipesUsingIngredient
+                .sorted { a, b in
+                    let aHasExpiring = !a.expiringItemsUsed.isEmpty
+                    let bHasExpiring = !b.expiringItemsUsed.isEmpty
+                    if aHasExpiring != bHasExpiring {
+                        return aHasExpiring
+                    }
+                    return a.pantryItemsUsed.count > b.pantryItemsUsed.count
+                }
+                .prefix(maxPerIngredient)
+
+            recipesToKeep.formUnion(topRecipes.map { $0.id })
+        }
+
+        return recipes.filter { recipesToKeep.contains($0.id) }
+    }
+
+    // MARK: - Recalculate expiring items for existing recipes
+
+    /// Dynamically recalculates which pantry items are expiring for each recipe based on current pantry state
+    private func recalculateExpiringItems(for recipes: [Recipe], using pantryItems: [PantryItem]) -> [Recipe] {
+        // Get currently expiring items (≤3 days)
+        let expiringItems = pantryItems.filter { $0.daysUntilExpiration <= 3 && !$0.isExpired }
+        let expiringNames = Set(expiringItems.map { ($0.genericName ?? $0.name).lowercased() })
+
+        return recipes.map { recipe in
+            // Find which of this recipe's pantry items are currently expiring
+            let currentlyExpiring = recipe.pantryItemsUsed.filter { expiringNames.contains($0.lowercased()) }
+
+            // Return updated recipe with recalculated expiring items
+            return Recipe(
+                id: recipe.id,
+                label: recipe.label,
+                image: recipe.image,
+                sourceUrl: recipe.sourceUrl,
+                sourcePublisher: recipe.sourcePublisher,
+                yield: recipe.yield,
+                totalTime: recipe.totalTime,
+                ingredientLines: recipe.ingredientLines,
+                cuisineType: recipe.cuisineType,
+                mealType: recipe.mealType,
+                pantryItemsUsed: recipe.pantryItemsUsed,
+                expiringItemsUsed: currentlyExpiring,
+                generatedFrom: recipe.generatedFrom,
+                createdAt: recipe.createdAt,
+                userId: recipe.userId
+            )
+        }
+    }
+
     // MARK: - Load recipes from Supabase (one-time cache)
     /// Only loads from database on first call; subsequent calls are no-ops unless recipes were generated/pruned.
     func loadRecipes() async {
@@ -50,8 +142,29 @@ class RecipeViewModel: ObservableObject {
             let fetched = try await supabase.fetchRecipes()
             print("✅ Fetched \(fetched.count) recipes from Supabase")
 
+            // Recalculate expiring items based on current pantry state
+            let currentPantryItems = pantryItemsProvider?() ?? []
+            let updatedRecipes = recalculateExpiringItems(for: fetched, using: currentPantryItems)
+            print("🔄 Recalculated expiring items for \(updatedRecipes.count) recipes")
+
+            // Limit recipes per ingredient (clean up old recipes that violate limits)
+            let limitedRecipes = limitRecipesPerIngredient(updatedRecipes, maxPerIngredient: 5)
+            print("🎯 After limiting per ingredient: \(limitedRecipes.count) recipes")
+
             await MainActor.run {
-                recipes = fetched
+                // Sort recipes: prioritize those with expiring items, then by pantry items used
+                recipes = limitedRecipes.sorted { a, b in
+                    let aHasExpiring = !a.expiringItemsUsed.isEmpty
+                    let bHasExpiring = !b.expiringItemsUsed.isEmpty
+
+                    // Recipes with expiring items always come first
+                    if aHasExpiring != bHasExpiring {
+                        return aHasExpiring
+                    }
+
+                    // Within same category, sort by most pantry items used
+                    return a.pantryItemsUsed.count > b.pantryItemsUsed.count
+                }
                 isLoading = false
                 hasInitializedRecipes = true // Mark as cached
 
@@ -120,8 +233,13 @@ class RecipeViewModel: ObservableObject {
         await MainActor.run { isGenerating = true }
 
         do {
+            // Identify expiring items (≤3 days)
+            let expiringItems = pantryItems.filter { $0.daysUntilExpiration <= 3 && !$0.isExpired }
+            let expiringIngredients = expiringItems.map { ($0.genericName ?? $0.name).lowercased() }
+            print("⚠️ Found \(expiringItems.count) expiring items: \(expiringIngredients)")
+
             // Query Edamam API
-            let newRecipes = try await recipeService.searchRecipes(ingredients: currentIngredients)
+            let newRecipes = try await recipeService.searchRecipes(ingredients: currentIngredients, expiringIngredients: expiringIngredients)
             print("🍳 Edamam returned \(newRecipes.count) recipes")
 
             // Get current user ID
@@ -141,6 +259,7 @@ class RecipeViewModel: ObservableObject {
                     cuisineType: recipe.cuisineType,
                     mealType: recipe.mealType,
                     pantryItemsUsed: recipe.pantryItemsUsed,
+                    expiringItemsUsed: recipe.expiringItemsUsed,
                     generatedFrom: recipe.generatedFrom,
                     createdAt: recipe.createdAt,
                     userId: userId
@@ -166,8 +285,26 @@ class RecipeViewModel: ObservableObject {
             // Refresh authoritative list from Supabase to avoid local duplicates
             let refreshed = try await supabase.fetchRecipes()
 
+            // Recalculate expiring items based on current pantry state
+            let updatedRecipes = recalculateExpiringItems(for: refreshed, using: pantryItems)
+
+            // Limit recipes per ingredient
+            let limitedRecipes = limitRecipesPerIngredient(updatedRecipes, maxPerIngredient: 5)
+
             await MainActor.run {
-                recipes = refreshed
+                // Sort recipes: prioritize those with expiring items, then by pantry items used
+                recipes = limitedRecipes.sorted { a, b in
+                    let aHasExpiring = !a.expiringItemsUsed.isEmpty
+                    let bHasExpiring = !b.expiringItemsUsed.isEmpty
+
+                    // Recipes with expiring items always come first
+                    if aHasExpiring != bHasExpiring {
+                        return aHasExpiring
+                    }
+
+                    // Within same category, sort by most pantry items used
+                    return a.pantryItemsUsed.count > b.pantryItemsUsed.count
+                }
                 isGenerating = false
 
                 // Update dedup tracker

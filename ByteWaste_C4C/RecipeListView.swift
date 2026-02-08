@@ -171,6 +171,16 @@ struct RecipeRowView: View {
                     .font(.system(size: 12))
                     .foregroundColor(.appPrimaryGreen)
                 }
+
+                // Expiring items indicator
+                if !recipe.expiringItemsUsed.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.circle.fill")
+                        Text("\(recipe.expiringItemsUsed.count) expiring soon")
+                    }
+                    .font(.system(size: 12))
+                    .foregroundColor(.red)
+                }
             }
 
             Spacer()
@@ -341,9 +351,8 @@ struct RecipeDetailView: View {
                                 .foregroundColor(.white)
                                 .cornerRadius(8)
                             }
+                            .padding(.bottom, 24)
                         }
-
-                        Spacer()
                     }
                     .padding()
                 }
@@ -383,6 +392,7 @@ struct RecipeDetailView: View {
                     totalTime: 30,
                     ingredientLines: ["2 chicken breasts", "3 cups cooked rice", "2 eggs"],
                     pantryItemsUsed: ["chicken", "rice"],
+                    expiringItemsUsed: ["chicken"],
                     generatedFrom: ["chicken", "rice", "eggs"]
                 )
             ]
