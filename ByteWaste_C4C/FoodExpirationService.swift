@@ -202,33 +202,11 @@ public struct FoodAnalysisResult {
 // MARK: - Service
 public class FoodExpirationService {
 
-    private let backgroundRemovalService = BackgroundRemovalService()
+
 
     public init() {}
 
-    // MARK: - Image Processing
-
-    /// Process image URL through background removal
-    /// Returns the background-removed image URL, or original URL if processing fails
-    private func processImageURL(_ imageURL: String?) async -> String? {
-        guard let imageURL = imageURL, !imageURL.isEmpty else {
-            return nil
-        }
-
-        // Check if background removal is enabled in config
-        guard Config.REMOVE_BG else {
-            print("ℹ️ Background removal is disabled in config - using original image")
-            return imageURL
-        }
-
-        do {
-            let processedURL = try await backgroundRemovalService.removeBackground(from: imageURL)
-            return processedURL
-        } catch {
-            print("⚠️ Background removal failed, using original image: \(error.localizedDescription)")
-            return imageURL  // Fallback to original image if background removal fails
-        }
-    }
+ 
 
     // MARK: - API Fetch Methods
     
@@ -609,9 +587,6 @@ public class FoodExpirationService {
             }
         }
 
-        // Step 6.5: Process image through background removal
-        finalImageURL = await processImageURL(finalImageURL)
-
         // Step 7: Return result
         return FoodAnalysisResult(
             name: food.label,
@@ -675,15 +650,12 @@ public class FoodExpirationService {
         print("   Expiration date: \(expirationDate)")
         print("")
 
-        // Step 5.5: Process image through background removal
-        let processedImageURL = await processImageURL(food.image)
-
         // Step 6: Return result
         return FoodAnalysisResult(
             name: food.label,
             brand: food.brand,
             category: aiResponse.food_category ?? "Other",  // Use AI category instead of Edamam
-            imageURL: processedImageURL,
+            imageURL: food.image,
             edamamFoodId: food.foodId,
             shelfLifeEstimates: shelfLifeEstimates,
             recommendedStorage: storageLocation,
@@ -698,8 +670,7 @@ public class FoodExpirationService {
     public func fetchGenericFoodImage(genericName: String) async -> String? {
         do {
             let genericFood = try await searchFoodByName(name: genericName)
-            // Process image through background removal before returning
-            return await processImageURL(genericFood.image)
+            return genericFood.image
         } catch {
             print("⚠️ Failed to fetch generic image for '\(genericName)': \(error.localizedDescription)")
             return nil

@@ -114,6 +114,9 @@ struct PantryView: View {
                             .padding(.horizontal, 16)
                             .padding(.bottom, 80) // Extra padding for tab bar
                         }
+                        .refreshable {
+                            await viewModel.refreshItems()
+                        }
                     }
                 }
             }
