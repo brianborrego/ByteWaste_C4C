@@ -28,7 +28,7 @@ struct LoginView: View {
 
                     // Logo/Title
                     VStack(spacing: 8) {
-                        Text("ByteWaste")
+                        Text("UPantry")
                             .font(.system(size: 48, weight: .bold))
                             .foregroundStyle(.linearGradient(
                                 colors: [.appGradientTop, .appGradientBottom],
