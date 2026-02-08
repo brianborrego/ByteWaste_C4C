@@ -28,7 +28,7 @@ struct ContentView: View {
                         RecipesPlaceholderView()
                             .transition(.opacity)
                     } else if selectedTab == .shopping {
-                        ShoppingPlaceholderView()
+                        ShoppingListView()
                             .transition(.opacity)
                     } else if selectedTab == .sustainability {
                         SustainabilityView()
@@ -125,28 +125,6 @@ private struct RecipesPlaceholderView: View {
     }
 }
 
-private struct ShoppingPlaceholderView: View {
-    var body: some View {
-        ZStack {
-            Color.appCream.ignoresSafeArea()
-
-            VStack(spacing: 20) {
-                Image(systemName: "cart.fill")
-                    .font(.system(size: 64))
-                    .foregroundColor(.appPrimaryGreen)
-
-                Text("Shopping List")
-                    .font(.system(size: 32, weight: .bold))
-                    .foregroundStyle(.linearGradient(
-                        colors: [.appGradientTop, .appGradientBottom],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ))
-
-                Text("Coming Soon")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
         }
     }
 }
