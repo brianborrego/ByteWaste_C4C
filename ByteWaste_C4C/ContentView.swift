@@ -14,8 +14,8 @@ struct ContentView: View {
                 .tabItem { Label("Pantry", systemImage: "cabinet") }
             Text("Recipes (coming soon)")
                 .tabItem { Label("Recipes", systemImage: "book") }
-            Text("Shopping List (coming soon)")
-                .tabItem { Label("Shopping", systemImage: "cart") }
+            ProgressTreeView()
+                .tabItem { Label("Progress", systemImage: "tree") }
         }
     }
 }
