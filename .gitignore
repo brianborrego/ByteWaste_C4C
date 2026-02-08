@@ -1,2 +1,6 @@
 # API keys
 Config.swift
+
+# xcode files
+project.pbxproj
+ByteWaste_C4C.xcscheme
