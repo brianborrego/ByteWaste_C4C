@@ -45,6 +45,34 @@ struct PantryItem: Identifiable, Equatable, Codable {
         case shelfLifeEstimates = "shelf_life_estimates"
         case edamamFoodId = "edamam_food_id"
         case imageURL = "image_url"
+        case sustainabilityNotes = "sustainability_notes"
+        case amountRemaining = "amount_remaining"
+        case initialQuantityAmount = "initial_quantity_amount"
+    }
+
+    // Custom decoder to handle database NULLs and provide defaults
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        storageLocation = try container.decode(StorageLocation.self, forKey: .storageLocation)
+        scanDate = try container.decode(Date.self, forKey: .scanDate)
+        currentExpirationDate = try container.decode(Date.self, forKey: .currentExpirationDate)
+        shelfLifeEstimates = try container.decode(ShelfLifeEstimates.self, forKey: .shelfLifeEstimates)
+
+        // Optional fields with nil defaults
+        edamamFoodId = try? container.decode(String.self, forKey: .edamamFoodId)
+        imageURL = try? container.decode(String.self, forKey: .imageURL)
+        category = try? container.decode(String.self, forKey: .category)
+        quantity = try? container.decode(String.self, forKey: .quantity)
+        brand = try? container.decode(String.self, forKey: .brand)
+        notes = try? container.decode(String.self, forKey: .notes)
+        sustainabilityNotes = try? container.decode(String.self, forKey: .sustainabilityNotes)
+        initialQuantityAmount = try? container.decode(Double.self, forKey: .initialQuantityAmount)
+
+        // amountRemaining with default value of 1.0 if missing/NULL
+        amountRemaining = (try? container.decode(Double.self, forKey: .amountRemaining)) ?? 1.0
     }
 
     // Computed properties
@@ -129,14 +157,17 @@ class PantryViewModel: ObservableObject {
     // MARK: - Load from Supabase
 
     func loadItems() async {
+        print("🔄 Loading items from Supabase...")
         await MainActor.run { isLoading = true }
         do {
             let fetched = try await supabase.fetchItems()
+            print("✅ Successfully fetched \(fetched.count) items from Supabase")
             await MainActor.run {
                 items = fetched
                 isLoading = false
             }
         } catch {
+            print("❌ Failed to load items from Supabase: \(error)")
             await MainActor.run {
                 errorMessage = "Failed to load items: \(error.localizedDescription)"
                 isLoading = false
@@ -279,8 +310,21 @@ class PantryViewModel: ObservableObject {
     }
 
     func updateItemAmount(_ item: PantryItem, newAmount: Double) {
+        // Optimistic update
         if let index = items.firstIndex(where: { $0.id == item.id }) {
             items[index].amountRemaining = newAmount
+
+            // Update in Supabase
+            let updatedItem = items[index]
+            Task {
+                do {
+                    try await supabase.updateItem(updatedItem)
+                } catch {
+                    await MainActor.run {
+                        errorMessage = "Failed to update amount: \(error.localizedDescription)"
+                    }
+                }
+            }
         }
     }
 
@@ -288,9 +332,20 @@ class PantryViewModel: ObservableObject {
         // TODO: Track disposal method for rewards/punishment system
         print("📊 Item disposed: \(item.name) - Method: \(method.rawValue)")
 
-        // Remove item from pantry
+        // Optimistic removal from local array
         if let index = items.firstIndex(where: { $0.id == item.id }) {
             items.remove(at: index)
+        }
+
+        // Delete from Supabase
+        Task {
+            do {
+                try await supabase.deleteItem(id: item.id)
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Failed to dispose item: \(error.localizedDescription)"
+                }
+            }
         }
     }
 }
