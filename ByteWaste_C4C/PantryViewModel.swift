@@ -9,6 +9,12 @@ import SwiftUI
 import Combine
 
 // MARK: - Models
+enum DisposalMethod: String, Codable {
+    case usedFully = "Used Fully"
+    case usedPartially = "Used Partially"
+    case thrownAway = "Thrown Away"
+}
+
 struct PantryItem: Identifiable, Equatable, Codable {
     let id: UUID
     var name: String
@@ -24,21 +30,42 @@ struct PantryItem: Identifiable, Equatable, Codable {
     var quantity: String?
     var brand: String?
     var notes: String?
+    var sustainabilityNotes: String?
+
+    // Amount tracking
+    var amountRemaining: Double  // 0.0 to 1.0 (percentage)
+    var initialQuantityAmount: Double?  // Optional: actual quantity from barcode (oz, grams, etc.)
 
     // Computed properties
     var daysUntilExpiration: Int {
         Calendar.current.dateComponents([.day], from: Date(), to: currentExpirationDate).day ?? 0
     }
-    
+
     var isExpired: Bool {
         currentExpirationDate < Date()
     }
-    
+
     var urgencyColor: Color {
         let days = daysUntilExpiration
         if days <= 3 { return .red }
         else if days <= 7 { return .orange }
         else { return .green }
+    }
+
+    var formattedTimeRemaining: String {
+        let days = daysUntilExpiration
+
+        if days < 0 {
+            return "Expired"
+        } else if days < 14 {
+            return "\(days)d"
+        } else if days < 56 {
+            let weeks = days / 7
+            return "\(weeks)w"
+        } else {
+            let months = days / 30
+            return "\(months)mo"
+        }
     }
     
     init(
@@ -53,7 +80,10 @@ struct PantryItem: Identifiable, Equatable, Codable {
         category: String? = nil,
         quantity: String? = nil,
         brand: String? = nil,
-        notes: String? = nil
+        notes: String? = nil,
+        sustainabilityNotes: String? = nil,
+        amountRemaining: Double = 1.0,
+        initialQuantityAmount: Double? = nil
     ) {
         self.id = id
         self.name = name
@@ -67,6 +97,9 @@ struct PantryItem: Identifiable, Equatable, Codable {
         self.quantity = quantity
         self.brand = brand
         self.notes = notes
+        self.sustainabilityNotes = sustainabilityNotes
+        self.amountRemaining = amountRemaining
+        self.initialQuantityAmount = initialQuantityAmount
     }
 }
 
@@ -81,17 +114,8 @@ class PantryViewModel: ObservableObject {
     private let foodService = FoodExpirationService()
 
     init() {
-        // Sample data for testing
-        let sampleEstimates = ShelfLifeEstimates(fridge: 7, freezer: 30, shelf: 3)
-        self.items = [
-            PantryItem(
-                name: "Sample Apple",
-                storageLocation: .fridge,
-                currentExpirationDate: Date().addingTimeInterval(86400 * 5),
-                shelfLifeEstimates: sampleEstimates,
-                category: "Fruit"
-            )
-        ]
+        // Start with empty pantry
+        self.items = []
     }
 
     func add(_ item: PantryItem) {
@@ -120,7 +144,8 @@ class PantryViewModel: ObservableObject {
                 category: result.category,
                 quantity: "1",
                 brand: result.brand,
-                notes: result.notes
+                notes: result.notes,
+                sustainabilityNotes: result.sustainabilityNotes
             )
             
             await MainActor.run {
@@ -160,7 +185,8 @@ class PantryViewModel: ObservableObject {
                 category: result.category,
                 quantity: "1",
                 brand: result.brand,
-                notes: result.notes
+                notes: result.notes,
+                sustainabilityNotes: result.sustainabilityNotes
             )
             
             await MainActor.run {
@@ -197,5 +223,21 @@ class PantryViewModel: ObservableObject {
 
     func delete(at offsets: IndexSet) {
         items.remove(atOffsets: offsets)
+    }
+
+    func updateItemAmount(_ item: PantryItem, newAmount: Double) {
+        if let index = items.firstIndex(where: { $0.id == item.id }) {
+            items[index].amountRemaining = newAmount
+        }
+    }
+
+    func disposeItem(_ item: PantryItem, method: DisposalMethod) {
+        // TODO: Track disposal method for rewards/punishment system
+        print("📊 Item disposed: \(item.name) - Method: \(method.rawValue)")
+
+        // Remove item from pantry
+        if let index = items.firstIndex(where: { $0.id == item.id }) {
+            items.remove(at: index)
+        }
     }
 }

@@ -143,14 +143,20 @@ fileprivate struct ShelfLifeAIResponse: Codable {
     let shelf_days: Int
     let recommended_storage: String
     let notes: String?
+    let sustainability_notes: String?
+    let food_category: String?
+    let generic_name: String?
 
     // Standard initializer for fallback values
-    init(fridge_days: Int, freezer_days: Int, shelf_days: Int, recommended_storage: String, notes: String?) {
+    init(fridge_days: Int, freezer_days: Int, shelf_days: Int, recommended_storage: String, notes: String?, sustainability_notes: String?, food_category: String?, generic_name: String?) {
         self.fridge_days = fridge_days
         self.freezer_days = freezer_days
         self.shelf_days = shelf_days
         self.recommended_storage = recommended_storage
         self.notes = notes
+        self.sustainability_notes = sustainability_notes
+        self.food_category = food_category
+        self.generic_name = generic_name
     }
 
     // Custom decoding to handle flexible AI responses
@@ -192,6 +198,15 @@ fileprivate struct ShelfLifeAIResponse: Codable {
 
         // Decode optional notes
         notes = try? container.decode(String.self, forKey: .notes)
+
+        // Decode optional sustainability_notes
+        sustainability_notes = try? container.decode(String.self, forKey: .sustainability_notes)
+
+        // Decode optional food_category
+        food_category = try? container.decode(String.self, forKey: .food_category)
+
+        // Decode optional generic_name
+        generic_name = try? container.decode(String.self, forKey: .generic_name)
     }
 }
 
@@ -205,6 +220,7 @@ public struct FoodAnalysisResult {
     public let shelfLifeEstimates: ShelfLifeEstimates
     public let recommendedStorage: StorageLocation
     public let notes: String?
+    public let sustainabilityNotes: String?
     public let expirationDate: Date
 }
 
@@ -293,17 +309,85 @@ public class FoodExpirationService {
         if let category = food.categoryLabel ?? food.category {
             foodDescription += "\nCategory: \(category)"
         }
+
+        print("\n🍎 Requesting AI shelf life estimates for:")
+        print("   Product: \(food.label)")
+        if let brand = food.brand {
+            print("   Brand: \(brand)")
+        }
+        if let category = food.categoryLabel ?? food.category {
+            print("   Category: \(category)")
+        }
+        print("")
         
         let systemPrompt = """
         You are a food safety expert specializing in shelf life estimation. Your ONLY job is to return JSON data.
 
-        CRITICAL RULES:
+        CRITICAL FORMAT RULES:
         1. Return ONLY raw JSON - no markdown, no code blocks, no explanations
         2. Do NOT include ```json or ``` markers
         3. Use integer numbers for all day values, never strings
         4. The "recommended_storage" must be exactly one of: "fridge", "freezer", or "shelf"
-        5. For shelf_days: use 0 if the item CANNOT be stored at room temperature (e.g., dairy, meat, fish)
-        6. Be realistic: milk lasts ~7 days in fridge, not 90 days
+
+        STORAGE & EXPIRATION GUIDELINES:
+
+        Be GENEROUS with expiration dates - modern food preservation means items last longer than you might think:
+        - Regular (non-organic) eggs: 28-35 days in fridge (preservatives help them last)
+        - Organic eggs: 14-21 days in fridge (no preservatives, expire faster)
+        - Regular milk: 7-10 days in fridge
+        - Organic milk: 5-7 days in fridge
+        - Regular produce: Add 2-3 extra days compared to organic
+
+        STORAGE LOCATION RULES:
+
+        FREEZER (recommended_storage: "freezer"):
+        - Raw meat (chicken, beef, pork): freezer 90-180 days, fridge 2-3 days, shelf 0
+        - Raw fish/seafood: freezer 60-90 days, fridge 1-2 days, shelf 0
+        - Frozen vegetables (e.g., "Frozen Peas"): freezer 180-365 days, fridge 2-3 days, shelf 0
+        - Frozen meals/prepared foods: freezer 90-180 days, fridge 3-4 days, shelf 0
+
+        FRIDGE (recommended_storage: "fridge"):
+        - Dairy (milk, yogurt, cheese): fridge 7-21 days depending on type, freezer 30-60 days, shelf 0
+        - Eggs: fridge 28-35 days (regular) or 14-21 days (organic), freezer 0, shelf 0
+        - Fresh produce (lettuce, berries): fridge 5-14 days depending on type, freezer 60-90 days, shelf 0
+        - Condiments that need refrigeration after opening (ketchup, mayo, mustard, salad dressing, BBQ sauce, hot sauce, soy sauce): fridge 60-180 days, freezer 0, shelf 0
+        - Deli meats: fridge 5-7 days, freezer 60 days, shelf 0
+        - Leftovers/prepared foods: fridge 3-5 days, freezer 60-90 days, shelf 0
+
+        SHELF/PANTRY (recommended_storage: "shelf"):
+        - Canned goods in METAL CANS (tuna, beans, soup, vegetables, fruit): shelf 365-730 days, fridge 365 days, freezer 0
+        - Dry goods (pasta, rice, flour, cereal, oats): shelf 180-730 days, fridge 180-730 days, freezer 0
+        - Bread/baked goods: shelf 5-7 days, fridge 10-14 days, freezer 90 days
+        - Shelf-stable items (crackers, chips, cookies): shelf 60-180 days, fridge 60-180 days, freezer 0
+        - Oils/vinegars: shelf 180-365 days, fridge 180-365 days, freezer 0
+        - Unopened condiments: shelf 365 days, fridge 365 days, freezer 0
+
+        SPECIAL CASES:
+        - If the product name contains "organic" → reduce fridge/shelf days by 20-30%
+        - If the product mentions "fresh" → prefer fridge storage
+        - If the product mentions "frozen" → prefer freezer storage
+        - If the product mentions "canned" or you see a brand known for canned goods → prefer shelf storage
+        - Bananas: shelf 5-7 days, fridge 10-14 days (refrigeration slows ripening), freezer 90 days
+
+        For shelf_days: use 0 if the item CANNOT safely be stored at room temperature (meat, dairy, fish, eggs, most produce).
+
+        FOOD CATEGORIES:
+        You MUST categorize the food into ONE of these categories:
+        - "Fruits" (fresh fruit, dried fruit)
+        - "Vegetables" (fresh vegetables, leafy greens)
+        - "Meat" (beef, pork, lamb, processed meats)
+        - "Poultry" (chicken, turkey, duck, eggs)
+        - "Fish & Seafood" (fresh fish, shellfish)
+        - "Dairy" (milk, cheese, yogurt, butter)
+        - "Grains & Bread" (rice, pasta, bread, cereal, flour)
+        - "Canned & Jarred Goods" (beans, soups, sauces, vegetables, tuna)
+        - "Frozen Foods" (frozen meals, frozen vegetables, ice cream)
+        - "Pantry Staples" (oils, vinegar, sugar, flour, baking ingredients)
+        - "Snacks & Sweets" (chips, cookies, chocolate, candy)
+        - "Condiments & Sauces" (ketchup, mayo, mustard, hot sauce, dressings)
+        - "Beverages"
+        - "Prepared / Ready-to-Eat"
+        - "Other" (if it doesn't fit any category above)
 
         Required JSON structure (copy this EXACTLY):
         {
@@ -311,8 +395,22 @@ public class FoodExpirationService {
           "freezer_days": 30,
           "shelf_days": 0,
           "recommended_storage": "fridge",
-          "notes": "Keep refrigerated"
+          "notes": "Keep refrigerated",
+          "sustainability_notes": "Compost the stem and leaves",
+          "food_category": "Dairy",
+          "generic_name": "milk"
         }
+
+        GENERIC NAME:
+        - Provide a simplified, generic version of the food name (lowercase, 1-2 words max)
+        - Examples: "Grade A Whole Milk" → "milk", "Cage Free Large Eggs" → "eggs", "Organic Bananas" → "banana"
+        - This helps find images for products without pictures
+        - Remove brand names, qualifiers (organic, fresh, etc.), and specific varieties
+
+        SUSTAINABILITY NOTES:
+        - Include brief advice (1 sentence) on how to dispose of inedible parts sustainably
+        - Examples: "Compost peels and cores", "Recycle the can after use", "Compost egg shells", "Recycle plastic packaging"
+        - If no special disposal advice, you can omit this field or use an empty string
         """
 
         let userPrompt = """
@@ -320,18 +418,28 @@ public class FoodExpirationService {
 
         \(foodDescription)
 
-        Storage conditions:
+        Analyze the product name, brand, and category to determine:
         - fridge_days: How many days in refrigerator (40°F/4°C)
         - freezer_days: How many days in freezer (0°F/-18°C)
         - shelf_days: How many days at room temperature (if unsafe, use 0)
         - recommended_storage: Best storage location ("fridge", "freezer", or "shelf")
         - notes: Brief storage instruction (1 sentence)
+        - food_category: ONE of the categories listed in the system prompt
+        - generic_name: Simplified food name (lowercase, 1-2 words, no brand/qualifiers)
 
-        REMEMBER:
-        - Perishables (meat, dairy, fish, eggs): fridge 2-7 days, shelf_days = 0
-        - Produce: fridge 3-14 days depending on type
-        - Shelf-stable (canned, dry goods): shelf 180-365 days
-        - Return ONLY the JSON object, nothing else
+        EXAMPLES:
+        - "Chicken Breast" → {"fridge_days": 2, "freezer_days": 180, "shelf_days": 0, "recommended_storage": "freezer", "notes": "Store in freezer, thaw in fridge before use", "sustainability_notes": "Compost bones and scraps", "food_category": "Poultry", "generic_name": "chicken"}
+        - "Organic Eggs" → {"fridge_days": 21, "freezer_days": 0, "shelf_days": 0, "recommended_storage": "fridge", "notes": "Keep refrigerated", "sustainability_notes": "Compost egg shells", "food_category": "Eggs", "generic_name": "eggs"}
+        - "Regular Eggs" → {"fridge_days": 35, "freezer_days": 0, "shelf_days": 0, "recommended_storage": "fridge", "notes": "Keep refrigerated", "sustainability_notes": "Compost egg shells", "food_category": "Eggs", "generic_name": "eggs"}
+        - "Heinz Ketchup" → {"fridge_days": 180, "freezer_days": 0, "shelf_days": 0, "recommended_storage": "fridge", "notes": "Refrigerate after opening", "sustainability_notes": "Recycle the plastic bottle", "food_category": "Condiments & Sauces", "generic_name": "ketchup"}
+        - "Canned Tuna" → {"fridge_days": 730, "freezer_days": 0, "shelf_days": 730, "recommended_storage": "shelf", "notes": "Store in cool dry place", "sustainability_notes": "Recycle the metal can", "food_category": "Canned & Jarred Goods", "generic_name": "tuna"}
+        - "Bananas" → {"fridge_days": 14, "freezer_days": 90, "shelf_days": 7, "recommended_storage": "shelf", "notes": "Refrigerate to slow ripening", "sustainability_notes": "Compost peels", "food_category": "Fruits", "generic_name": "banana"}
+        - "Organic Milk" → {"fridge_days": 7, "freezer_days": 30, "shelf_days": 0, "recommended_storage": "fridge", "notes": "Keep refrigerated", "sustainability_notes": "Recycle the carton", "food_category": "Dairy", "generic_name": "milk"}
+        - "Frozen Peas" → {"fridge_days": 3, "freezer_days": 365, "shelf_days": 0, "recommended_storage": "freezer", "notes": "Keep frozen until ready to cook", "sustainability_notes": "Recycle the plastic bag", "food_category": "Frozen Foods", "generic_name": "peas"}
+        - "Pasta" → {"fridge_days": 730, "freezer_days": 0, "shelf_days": 730, "recommended_storage": "shelf", "notes": "Store in cool dry place", "sustainability_notes": "Recycle the cardboard box", "food_category": "Grains & Bread", "generic_name": "pasta"}
+
+        Be GENEROUS with expiration dates - food with preservatives lasts longer than organic alternatives.
+        Return ONLY the JSON object, nothing else.
         """
         
         let requestBody = ChatCompletionRequest(
@@ -340,7 +448,7 @@ public class FoodExpirationService {
                 ChatMessage(role: "system", content: systemPrompt),
                 ChatMessage(role: "user", content: userPrompt)
             ],
-            temperature: 0.3,
+            temperature: 0.5,  // Increased from 0.3 to allow more varied responses
             max_tokens: 500
         )
         
@@ -483,18 +591,34 @@ public class FoodExpirationService {
         }
         
         let expirationDate = Calendar.current.date(byAdding: .day, value: daysToAdd, to: Date()) ?? Date()
-        
-        // Step 6: Return result
-        // Note: imageURL can be nil - not all products have images in Edamam database
+
+        print("📅 Expiration Calculation:")
+        print("   Recommended storage: \(storageLocation.rawValue)")
+        print("   Days to add: \(daysToAdd)")
+        print("   Expiration date: \(expirationDate)")
+        print("")
+
+        // Step 6: Try to fetch generic image if barcode scan didn't provide one
+        var finalImageURL = food.image
+        if finalImageURL == nil, let genericName = aiResponse.generic_name, !genericName.isEmpty {
+            print("🖼️ No image from barcode scan, searching for generic image: '\(genericName)'")
+            finalImageURL = await fetchGenericFoodImage(genericName: genericName)
+            if finalImageURL != nil {
+                print("✅ Found generic image for '\(genericName)'")
+            }
+        }
+
+        // Step 7: Return result
         return FoodAnalysisResult(
             name: food.label,
             brand: food.brand,
-            category: food.categoryLabel ?? food.category,
-            imageURL: food.image,  // Optional - may be nil
+            category: aiResponse.food_category ?? "Other",  // Use AI category instead of Edamam
+            imageURL: finalImageURL,
             edamamFoodId: food.foodId,
             shelfLifeEstimates: shelfLifeEstimates,
             recommendedStorage: storageLocation,
             notes: aiResponse.notes,
+            sustainabilityNotes: aiResponse.sustainability_notes,
             expirationDate: expirationDate
         )
     }
@@ -539,21 +663,39 @@ public class FoodExpirationService {
         }
         
         let expirationDate = Calendar.current.date(byAdding: .day, value: daysToAdd, to: Date()) ?? Date()
-        
+
+        print("📅 Expiration Calculation (from image):")
+        print("   Recommended storage: \(storageLocation.rawValue)")
+        print("   Days to add: \(daysToAdd)")
+        print("   Expiration date: \(expirationDate)")
+        print("")
+
         // Step 6: Return result
         return FoodAnalysisResult(
             name: food.label,
             brand: food.brand,
-            category: food.categoryLabel ?? food.category,
+            category: aiResponse.food_category ?? "Other",  // Use AI category instead of Edamam
             imageURL: food.image,
             edamamFoodId: food.foodId,
             shelfLifeEstimates: shelfLifeEstimates,
             recommendedStorage: storageLocation,
             notes: aiResponse.notes,
+            sustainabilityNotes: aiResponse.sustainability_notes,
             expirationDate: expirationDate
         )
     }
     
+    /// Search for generic food image if barcode scan didn't return one
+    private func fetchGenericFoodImage(genericName: String) async -> String? {
+        do {
+            let genericFood = try await searchFoodByName(name: genericName)
+            return genericFood.image
+        } catch {
+            print("⚠️ Failed to fetch generic image for '\(genericName)': \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     /// Search for food by name (for image classification results)
     private func searchFoodByName(name: String) async throws -> EdamamFood {
         // Validate configuration
