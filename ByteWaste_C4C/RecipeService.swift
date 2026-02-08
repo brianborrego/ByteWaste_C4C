@@ -45,7 +45,7 @@ class RecipeService {
     /// Search Edamam Recipe API using multiple query combinations of pantry items.
     /// Generates individual, pair, and (if few items) triple queries, runs them
     /// in parallel, deduplicates, scores, filters, and returns top 15.
-    func searchRecipes(ingredients: [String]) async throws -> [Recipe] {
+    func searchRecipes(ingredients: [String], expiringIngredients: [String] = []) async throws -> [Recipe] {
         guard !ingredients.isEmpty else { return [] }
 
         // Generate query combinations, capped at 6 total API calls
@@ -72,6 +72,7 @@ class RecipeService {
 
         // Flatten and deduplicate by label + sourceUrl
         let lowercasedIngredients = ingredients.map { $0.lowercased() }
+        let lowercasedExpiringIngredients = expiringIngredients.map { $0.lowercased() }
         var seen = Set<String>()
         var allRecipes: [Recipe] = []
 
@@ -82,8 +83,9 @@ class RecipeService {
                 guard seen.insert(dedupKey).inserted else { continue }
 
                 let ingredientLines = edamamRecipe.ingredientLines ?? []
-                let pantryItemsUsed = matchPantryItems(
+                let matchResult = matchPantryItems(
                     pantryNames: lowercasedIngredients,
+                    expiringNames: lowercasedExpiringIngredients,
                     recipeIngredients: edamamRecipe.ingredients ?? [],
                     ingredientLines: ingredientLines
                 )
@@ -98,7 +100,8 @@ class RecipeService {
                     ingredientLines: ingredientLines,
                     cuisineType: edamamRecipe.cuisineType,
                     mealType: edamamRecipe.mealType,
-                    pantryItemsUsed: pantryItemsUsed,
+                    pantryItemsUsed: matchResult.pantryItemsUsed,
+                    expiringItemsUsed: matchResult.expiringItemsUsed,
                     generatedFrom: lowercasedIngredients
                 )
                 allRecipes.append(recipe)
@@ -107,8 +110,12 @@ class RecipeService {
 
         print("📦 Total unique recipes after dedup: \(allRecipes.count)")
 
+        // Limit recipes per ingredient to avoid overload (max 5 per ingredient)
+        let limitedRecipes = limitRecipesPerIngredient(allRecipes, maxPerIngredient: 5)
+        print("🎯 After limiting per ingredient: \(limitedRecipes.count) recipes")
+
         // Filter: keep recipes with <= 3 missing ingredients
-        let filtered = allRecipes.filter { recipe in
+        let filtered = limitedRecipes.filter { recipe in
             let total = recipe.ingredientLines.count
             let missing = max(0, total - recipe.pantryItemsUsed.count)
             return missing <= 3
@@ -200,17 +207,101 @@ class RecipeService {
         return edamamResponse.hits
     }
 
+    // MARK: - Recipe Limiting
+
+    /// Limit recipes per ingredient to avoid overloading with one ingredient
+    /// Each ingredient (except staples) can appear in at most maxPerIngredient recipes
+    /// Groups similar ingredients (e.g., "yogurt", "greek yogurt", "plain yogurt") together
+    private func limitRecipesPerIngredient(_ recipes: [Recipe], maxPerIngredient: Int) -> [Recipe] {
+        // Exclude common staples from limiting
+        let excludedStaples = Set(["water", "salt", "pepper", "sugar"])
+
+        // Extract base ingredients by removing common modifiers
+        func getBaseIngredient(_ ingredient: String) -> String {
+            let lower = ingredient.lowercased()
+            // Remove common modifiers to group variations together
+            let modifiers = ["fresh", "frozen", "canned", "dried", "cooked", "raw", "organic",
+                           "plain", "greek", "whole", "skim", "low-fat", "fat-free", "unsweetened",
+                           "sweetened", "vanilla", "strawberry", "chocolate", "extra", "virgin",
+                           "light", "heavy", "sour", "sweet", "spicy", "mild"]
+
+            var base = lower
+            for modifier in modifiers {
+                base = base.replacingOccurrences(of: "\(modifier) ", with: "")
+                base = base.replacingOccurrences(of: " \(modifier)", with: "")
+            }
+            return base.trimmingCharacters(in: .whitespaces)
+        }
+
+        // Group ingredients by base name
+        var baseIngredientGroups: [String: Set<String>] = [:]
+        let allIngredients = Set(recipes.flatMap { $0.pantryItemsUsed })
+
+        for ingredient in allIngredients where !excludedStaples.contains(ingredient.lowercased()) {
+            let base = getBaseIngredient(ingredient)
+            if baseIngredientGroups[base] == nil {
+                baseIngredientGroups[base] = []
+            }
+            baseIngredientGroups[base]?.insert(ingredient)
+        }
+
+        // Track which recipes to keep
+        var recipesToKeep = Set<UUID>()
+
+        // For each base ingredient group, limit total recipes across all variations
+        for (_, ingredientVariations) in baseIngredientGroups {
+            // Find all recipes that use ANY variation of this base ingredient
+            let recipesUsingIngredient = recipes.filter { recipe in
+                recipe.pantryItemsUsed.contains { pantryItem in
+                    ingredientVariations.contains { variation in
+                        pantryItem.lowercased() == variation.lowercased()
+                    }
+                }
+            }
+
+            // Sort by priority: expiring items first, then most pantry items used
+            let topRecipes = recipesUsingIngredient
+                .sorted { a, b in
+                    // Prioritize recipes with expiring items
+                    let aHasExpiring = !a.expiringItemsUsed.isEmpty
+                    let bHasExpiring = !b.expiringItemsUsed.isEmpty
+                    if aHasExpiring != bHasExpiring {
+                        return aHasExpiring
+                    }
+                    // Then by pantry match count
+                    return a.pantryItemsUsed.count > b.pantryItemsUsed.count
+                }
+                .prefix(maxPerIngredient)
+
+            recipesToKeep.formUnion(topRecipes.map { $0.id })
+        }
+
+        // Return only recipes that were selected
+        let result = recipes.filter { recipesToKeep.contains($0.id) }
+        print("🔍 Grouped \(allIngredients.count) ingredients into \(baseIngredientGroups.count) base groups")
+        return result
+    }
+
     // MARK: - Ingredient Matching
 
     /// Match pantry item names against recipe ingredients (case-insensitive)
     private func matchPantryItems(
         pantryNames: [String],
+        expiringNames: [String],
         recipeIngredients: [EdamamIngredient],
         ingredientLines: [String]
-    ) -> [String] {
-        var matched: [String] = []
+    ) -> (pantryItemsUsed: [String], expiringItemsUsed: [String]) {
+        // Common pantry staples assumed to always be available
+        let commonStaples = ["water", "salt", "pepper", "sugar"]
 
-        for pantryName in pantryNames {
+        // Combine actual pantry items with common staples for matching
+        let allAvailableItems = pantryNames + commonStaples
+        let expiringSet = Set(expiringNames)
+
+        var matched: [String] = []
+        var expiring: [String] = []
+
+        for pantryName in allAvailableItems {
             // Check against structured ingredient "food" field first
             let foundInFood = recipeIngredients.contains { ingredient in
                 guard let food = ingredient.food else { return false }
@@ -220,6 +311,10 @@ class RecipeService {
 
             if foundInFood {
                 matched.append(pantryName)
+                // Track if this matched item is expiring
+                if expiringSet.contains(pantryName) {
+                    expiring.append(pantryName)
+                }
                 continue
             }
 
@@ -230,10 +325,14 @@ class RecipeService {
 
             if foundInLines {
                 matched.append(pantryName)
+                // Track if this matched item is expiring
+                if expiringSet.contains(pantryName) {
+                    expiring.append(pantryName)
+                }
             }
         }
 
-        return matched
+        return (pantryItemsUsed: matched, expiringItemsUsed: expiring)
     }
 }
 

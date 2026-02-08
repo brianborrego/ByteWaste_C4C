@@ -98,6 +98,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
     }
 
     var urgencyColor: Color {
+        if isExpired { return .red }
         let days = daysUntilExpiration
         if days <= 3 { return .red }
         else if days <= 7 { return .orange }
@@ -288,6 +289,8 @@ class PantryViewModel: ObservableObject {
         items.append(item)
         isPresentingAddSheet = false
         onItemAdded?(items)
+        // Force UI refresh to recalculate expiration counters
+        forceRefresh()
         Task {
             do {
                 try await supabase.insertItem(item)
@@ -340,6 +343,9 @@ class PantryViewModel: ObservableObject {
                     items.append(newItem)
                     isAnalyzing = false
                     isPresentingScannerSheet = false
+                    onItemAdded?(items)
+                    // Force UI refresh to recalculate expiration counters
+                    forceRefresh()
                 }
                 return
             }
@@ -373,7 +379,8 @@ class PantryViewModel: ObservableObject {
                 isAnalyzing = false
                 isPresentingScannerSheet = false
                 onItemAdded?(items)
-                onItemAdded?(items)
+                // Force UI refresh to recalculate expiration counters
+                forceRefresh()
             }
         } catch {
             // Check if error is "no results" or 404 - if so, open manual entry with barcode pre-filled
@@ -452,6 +459,8 @@ class PantryViewModel: ObservableObject {
                 isAnalyzing = false
                 isPresentingScannerSheet = false
                 onItemAdded?(items)
+                // Force UI refresh to recalculate expiration counters
+                forceRefresh()
             }
         } catch {
             await MainActor.run {
@@ -507,6 +516,9 @@ class PantryViewModel: ObservableObject {
                 items.append(newItem)
                 isAnalyzing = false
                 isPresentingAddSheet = false
+                onItemAdded?(items)
+                // Force UI refresh to recalculate expiration counters
+                forceRefresh()
             }
         } catch {
             await MainActor.run {
@@ -540,6 +552,8 @@ class PantryViewModel: ObservableObject {
         items.remove(atOffsets: offsets)
         // Notify listeners about the removal (pass remaining items)
         onItemsRemoved?(items)
+        // Force UI refresh to recalculate expiration counters for remaining items
+        forceRefresh()
         Task {
             for item in itemsToDelete {
                 do {
@@ -569,6 +583,9 @@ class PantryViewModel: ObservableObject {
                     }
                 }
             }
+
+            // Force UI refresh to recalculate expiration counters
+            forceRefresh()
         }
     }
 
@@ -588,7 +605,22 @@ class PantryViewModel: ObservableObject {
             pointsChange = -5
         }
 
-        let newPoints = max(0, min(100, currentPoints + pointsChange))  // Clamp between 0-100
+        // Calculate new points, ensuring minimum of 0
+        var newPoints = max(0, currentPoints + pointsChange)
+
+        // Check if we EXCEEDED 100 (not just reached it) - add pine(s) and wrap around
+        if newPoints > 100 {
+            let pinesToAdd = newPoints / 100
+            // Add pine(s) to forest
+            addPinesToForest(count: pinesToAdd)
+            // Wrap points to remainder
+            newPoints = newPoints % 100
+            if newPoints == 0 {
+                newPoints = 100  // If exactly divisible, stay at 100
+            }
+            print("🌲 Added \(pinesToAdd) pine(s) to forest! Points wrapped to \(newPoints)")
+        }
+
         UserDefaults.standard.set(newPoints, forKey: "sustainabilityPoints")
 
         // Update tree level based on points (level = points / 10)
@@ -604,6 +636,9 @@ class PantryViewModel: ObservableObject {
             onItemsRemoved?(items)
         }
 
+        // Force UI refresh to recalculate expiration counters for remaining items
+        forceRefresh()
+
         // Delete from Supabase
         Task {
             do {
@@ -614,5 +649,38 @@ class PantryViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    // Helper to add pines to forest
+    private func addPinesToForest(count: Int) {
+        guard let data = UserDefaults.standard.data(forKey: "forestPines"),
+              var forestPines = try? JSONDecoder().decode([ForestPine].self, from: data) else {
+            // No existing forest, create new one
+            var newForest: [ForestPine] = []
+            for _ in 0..<count {
+                newForest.append(ForestPine())
+            }
+            if let encoded = try? JSONEncoder().encode(newForest) {
+                UserDefaults.standard.set(encoded, forKey: "forestPines")
+            }
+            return
+        }
+
+        // Add new pines to existing forest
+        for _ in 0..<count {
+            forestPines.append(ForestPine())
+        }
+
+        if let encoded = try? JSONEncoder().encode(forestPines) {
+            UserDefaults.standard.set(encoded, forKey: "forestPines")
+        }
+    }
+
+    // MARK: - Force Refresh
+
+    /// Forces a UI refresh by triggering an objectWillChange notification
+    /// This ensures all computed properties (like daysUntilExpiration) are recalculated
+    private func forceRefresh() {
+        objectWillChange.send()
     }
 }

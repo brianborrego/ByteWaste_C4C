@@ -6,10 +6,32 @@ struct PantryView: View {
     @State private var isEditMode = false
     @State private var showingProfileSheet = false
 
+    // Category filter state for each storage location
+    @State private var selectedCategoryShelf: String? = nil
+    @State private var selectedCategoryFridge: String? = nil
+    @State private var selectedCategoryFreezer: String? = nil
+
     private func itemsFor(_ location: StorageLocation) -> [PantryItem] {
-        viewModel.items
+        let selectedCategory: String?
+        switch location {
+        case .shelf:
+            selectedCategory = selectedCategoryShelf
+        case .fridge:
+            selectedCategory = selectedCategoryFridge
+        case .freezer:
+            selectedCategory = selectedCategoryFreezer
+        }
+
+        return viewModel.items
             .filter { $0.storageLocation == location }
+            .filter { selectedCategory == nil || $0.category == selectedCategory }
             .sorted { $0.daysUntilExpiration < $1.daysUntilExpiration }
+    }
+
+    private func categoriesFor(_ location: StorageLocation) -> [String] {
+        let items = viewModel.items.filter { $0.storageLocation == location }
+        let categories = Set(items.compactMap { $0.category })
+        return categories.sorted()
     }
 
     var body: some View {
@@ -61,6 +83,8 @@ struct PantryView: View {
                                     items: itemsFor(.shelf),
                                     isEditMode: isEditMode,
                                     viewModel: viewModel,
+                                    availableCategories: categoriesFor(.shelf),
+                                    selectedCategory: $selectedCategoryShelf,
                                     onLongPress: { withAnimation(.spring()) { isEditMode = true } }
                                 )
                                 .frame(height: (geometry.size.height - 16) / 3)
@@ -70,6 +94,8 @@ struct PantryView: View {
                                     items: itemsFor(.fridge),
                                     isEditMode: isEditMode,
                                     viewModel: viewModel,
+                                    availableCategories: categoriesFor(.fridge),
+                                    selectedCategory: $selectedCategoryFridge,
                                     onLongPress: { withAnimation(.spring()) { isEditMode = true } }
                                 )
                                 .frame(height: (geometry.size.height - 16) / 3)
@@ -79,6 +105,8 @@ struct PantryView: View {
                                     items: itemsFor(.freezer),
                                     isEditMode: isEditMode,
                                     viewModel: viewModel,
+                                    availableCategories: categoriesFor(.freezer),
+                                    selectedCategory: $selectedCategoryFreezer,
                                     onLongPress: { withAnimation(.spring()) { isEditMode = true } }
                                 )
                                 .frame(height: (geometry.size.height - 16) / 3)
@@ -106,66 +134,168 @@ private struct StorageSectionView: View {
     let items: [PantryItem]
     let isEditMode: Bool
     let viewModel: PantryViewModel
+    let availableCategories: [String]
+    @Binding var selectedCategory: String?
     let onLongPress: () -> Void
+
+    @State private var showCategoryMenu = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 36, weight: .bold))
-                .foregroundStyle(.linearGradient(
-                    colors: [.appGradientTop, .appGradientBottom],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ))
-                .padding(.horizontal, 20)
+            HStack(alignment: .center) {
+                Text(title)
+                    .font(.system(size: 36, weight: .bold))
+                    .foregroundStyle(.linearGradient(
+                        colors: [.appGradientTop, .appGradientBottom],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ))
 
-            if items.isEmpty {
-                Text("\(title) is empty!")
-                    .font(.subheadline)
-                    .foregroundColor(.appIconGray)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(items, id: \.id) { item in
-                            ZStack(alignment: .topLeading) {
-                                NavigationLink(destination: PantryItemDetailView(item: item, viewModel: viewModel)) {
-                                    PantryItemSquareCard(item: item)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                                .disabled(isEditMode)
-                                .simultaneousGesture(
-                                    LongPressGesture(minimumDuration: 1.0)
-                                        .onEnded { _ in
-                                            onLongPress()
-                                        }
-                                )
+                Spacer()
 
-                                // Delete button overlay when in edit mode
-                                if isEditMode {
-                                    Button {
-                                        withAnimation {
-                                            viewModel.disposeItem(item, method: .thrownAway)
-                                        }
-                                    } label: {
-                                        ZStack {
-                                            Circle()
-                                                .fill(Color.red)
-                                                .frame(width: 30, height: 30)
-                                            Image(systemName: "minus")
-                                                .font(.system(size: 16, weight: .bold))
-                                                .foregroundColor(.white)
+                // Category filter button (only show if there are categories)
+                if !availableCategories.isEmpty {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            showCategoryMenu.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "arrowtriangle.down.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(.appIconGray)
+                            .rotationEffect(.degrees(showCategoryMenu ? 180 : 0))
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+
+            // Content area - either shows items or category menu
+            ZStack {
+                // Items list
+                if !showCategoryMenu {
+                    Group {
+                        if items.isEmpty {
+                            Text("\(title) is empty!")
+                                .font(.subheadline)
+                                .foregroundColor(.appIconGray)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    ForEach(items, id: \.id) { item in
+                                        ZStack(alignment: .topLeading) {
+                                            NavigationLink(destination: PantryItemDetailView(item: item, viewModel: viewModel)) {
+                                                PantryItemSquareCard(item: item)
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                            .disabled(isEditMode)
+                                            .simultaneousGesture(
+                                                LongPressGesture(minimumDuration: 1.0)
+                                                    .onEnded { _ in
+                                                        onLongPress()
+                                                    }
+                                            )
+
+                                            // Delete button overlay when in edit mode
+                                            if isEditMode {
+                                                Button {
+                                                    withAnimation {
+                                                        viewModel.disposeItem(item, method: .thrownAway)
+                                                    }
+                                                } label: {
+                                                    ZStack {
+                                                        Circle()
+                                                            .fill(Color.red)
+                                                            .frame(width: 30, height: 30)
+                                                        Image(systemName: "minus")
+                                                            .font(.system(size: 16, weight: .bold))
+                                                            .foregroundColor(.white)
+                                                    }
+                                                }
+                                                .offset(x: 8, y: 8)
+                                                .transition(.scale)
+                                            }
                                         }
                                     }
-                                    .offset(x: 8, y: 8)
-                                    .transition(.scale)
+                                }
+                                .padding(.horizontal, 16)
+                            }
+                            .frame(maxHeight: .infinity)
+                        }
+                    }
+                    .opacity(showCategoryMenu ? 0 : 1)
+                    .animation(.easeOut(duration: 0.15), value: showCategoryMenu)
+                }
+
+                // Category menu (replaces items when shown)
+                if showCategoryMenu {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            // "All" option
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    selectedCategory = nil
+                                    showCategoryMenu = false
+                                }
+                            } label: {
+                                HStack {
+                                    Text("All")
+                                        .font(.system(size: 18, weight: selectedCategory == nil ? .semibold : .regular))
+                                        .foregroundColor(selectedCategory == nil ? .appPrimaryGreen : .black)
+                                    Spacer()
+                                    if selectedCategory == nil {
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundColor(.appPrimaryGreen)
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(selectedCategory == nil ? Color.appPrimaryGreen.opacity(0.1) : Color.clear)
+                            }
+
+                            Divider()
+                                .padding(.horizontal, 16)
+
+                            // Category options
+                            ForEach(availableCategories, id: \.self) { category in
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.15)) {
+                                        selectedCategory = category
+                                        showCategoryMenu = false
+                                    }
+                                } label: {
+                                    HStack {
+                                        Text(category)
+                                            .font(.system(size: 18, weight: selectedCategory == category ? .semibold : .regular))
+                                            .foregroundColor(selectedCategory == category ? .appPrimaryGreen : .black)
+                                        Spacer()
+                                        if selectedCategory == category {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 14, weight: .bold))
+                                                .foregroundColor(.appPrimaryGreen)
+                                        }
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 12)
+                                    .background(selectedCategory == category ? Color.appPrimaryGreen.opacity(0.1) : Color.clear)
+                                }
+
+                                if category != availableCategories.last {
+                                    Divider()
+                                        .padding(.horizontal, 16)
                                 }
                             }
                         }
+                        .background(Color.white)
+                        .cornerRadius(12)
+                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
                     }
-                    .padding(.horizontal, 16)
+                    .opacity(showCategoryMenu ? 1 : 0)
+                    .animation(.easeIn(duration: 0.15).delay(0.05), value: showCategoryMenu)
                 }
-                .frame(maxHeight: .infinity)
             }
         }
     }
@@ -250,6 +380,8 @@ private struct PantryItemDetailView: View {
     @State private var amountRemaining: Double
     @State private var showingDisposalAlert = false
     @State private var amountBeforeZero: Double
+    @State private var confettiTrigger: Int = 0
+    @State private var pointsPopup: PointsPopupData?
 
     init(item: PantryItem, viewModel: PantryViewModel) {
         self.item = item
@@ -304,10 +436,10 @@ private struct PantryItemDetailView: View {
                     }
 
                     VStack {
-                        Text(item.formattedTimeRemaining)
+                        Text(item.isExpired ? "Expired" : item.formattedTimeRemaining)
                             .font(.title2)
                             .fontWeight(.semibold)
-                            .foregroundColor(item.urgencyColor)
+                            .foregroundColor(item.isExpired ? .red : item.urgencyColor)
                         Text(item.isExpired ? "Expired" : "Remaining")
                             .font(.caption)
                             .fontWeight(.bold)
@@ -341,6 +473,25 @@ private struct PantryItemDetailView: View {
                         }
                 }
                 .padding(.horizontal, 16)
+
+                // Done with item button
+                Button {
+                    // Trigger the disposal alert
+                    amountBeforeZero = amountRemaining
+                    showingDisposalAlert = true
+                } label: {
+                    Text("Done with item")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color.appCream)
+                        .cornerRadius(12)
+                        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                }
+                .buttonStyle(PressEffectButtonStyle())
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
 
                 // Additional info
                 if let category = item.category {
@@ -435,9 +586,21 @@ private struct PantryItemDetailView: View {
                             color: .appPrimaryGreen,
                             isSelected: false
                         ) {
+                            // Show confetti and +10 points
+                            confettiTrigger += 1
+                            pointsPopup = PointsPopupData(points: 10, color: .appSecondaryGreen)
+
+                            // Hide after delay
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                pointsPopup = nil
+                            }
+
                             viewModel.disposeItem(item, method: .usedFully)
                             showingDisposalAlert = false
-                            dismiss()
+
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                dismiss()
+                            }
                         }
 
                         DisposalOptionButton(
@@ -447,9 +610,20 @@ private struct PantryItemDetailView: View {
                             color: .appDisposalYellow,
                             isSelected: false
                         ) {
+                            // Show +5 points (no confetti)
+                            pointsPopup = PointsPopupData(points: 5, color: .appSecondaryGreen)
+
+                            // Hide after delay
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                pointsPopup = nil
+                            }
+
                             viewModel.disposeItem(item, method: .usedPartially)
                             showingDisposalAlert = false
-                            dismiss()
+
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                dismiss()
+                            }
                         }
 
                         DisposalOptionButton(
@@ -459,9 +633,20 @@ private struct PantryItemDetailView: View {
                             color: .appDisposalRed,
                             isSelected: false
                         ) {
+                            // Show -10 points in red
+                            pointsPopup = PointsPopupData(points: -10, color: .appDisposalRed)
+
+                            // Hide after delay
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                pointsPopup = nil
+                            }
+
                             viewModel.disposeItem(item, method: .thrownAway)
                             showingDisposalAlert = false
-                            dismiss()
+
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                dismiss()
+                            }
                         }
                     }
 
@@ -491,6 +676,17 @@ private struct PantryItemDetailView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: showingDisposalAlert)
+        .overlay {
+            // Confetti effect
+            ConfettiManager(trigger: $confettiTrigger)
+                .allowsHitTesting(false)
+
+            // Points popup
+            if let popup = pointsPopup {
+                PointsPopupView(data: popup)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 }
 
@@ -791,6 +987,53 @@ private struct ManualEntryBarcodeScannerView: View {
             dismiss()
         }
         .ignoresSafeArea()
+    }
+}
+
+// MARK: - Press Effect Button Style
+struct PressEffectButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.7 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Points Popup Data
+struct PointsPopupData {
+    let points: Int
+    let color: Color
+}
+
+// MARK: - Points Popup View
+struct PointsPopupView: View {
+    let data: PointsPopupData
+    @State private var offset: CGFloat = 0
+    @State private var opacity: Double = 1.0
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "leaf.fill")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(data.color)
+
+            Text("\(data.points > 0 ? "+" : "")\(data.points)")
+                .font(.system(size: 48, weight: .bold))
+                .foregroundColor(data.color)
+
+            Image(systemName: "leaf.fill")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(data.color)
+        }
+        .offset(y: offset)
+        .opacity(opacity)
+        .onAppear {
+            withAnimation(.easeOut(duration: 2.0)) {
+                offset = -150
+                opacity = 0
+            }
+        }
     }
 }
 
