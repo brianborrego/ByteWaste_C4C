@@ -23,8 +23,8 @@ struct BarcodeScannerView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: DataScannerViewController, context: Context) {
-        // Ensure scanning is active when view updates
-        if !uiViewController.isScanning {
+        // Only restart scanning if we haven't detected a barcode yet
+        if !uiViewController.isScanning && !context.coordinator.hasDetectedBarcode {
             try? uiViewController.startScanning()
         }
     }
@@ -35,6 +35,7 @@ struct BarcodeScannerView: UIViewControllerRepresentable {
 
     class Coordinator: NSObject, DataScannerViewControllerDelegate {
         var parent: BarcodeScannerView
+        var hasDetectedBarcode = false
 
         init(_ parent: BarcodeScannerView) {
             self.parent = parent
@@ -44,9 +45,13 @@ struct BarcodeScannerView: UIViewControllerRepresentable {
             _ dataScanner: DataScannerViewController,
             didTapOn item: RecognizedItem
         ) {
+            guard !hasDetectedBarcode else { return }
+
             switch item {
             case .barcode(let barcode):
                 if let barcodeValue = barcode.payloadStringValue {
+                    hasDetectedBarcode = true
+                    dataScanner.stopScanning()
                     parent.onBarcodeDetected(barcodeValue)
                     parent.dismiss()
                 }
@@ -60,11 +65,16 @@ struct BarcodeScannerView: UIViewControllerRepresentable {
             didUpdate addedItems: [RecognizedItem],
             allItems: [RecognizedItem]
         ) {
+            guard !hasDetectedBarcode else { return }
+
             for item in addedItems {
                 if case .barcode(let barcode) = item {
                     if let barcodeValue = barcode.payloadStringValue {
+                        hasDetectedBarcode = true
+                        dataScanner.stopScanning()
                         parent.onBarcodeDetected(barcodeValue)
                         parent.dismiss()
+                        break // Exit loop after first detection
                     }
                 }
             }
@@ -90,6 +100,7 @@ struct BarcodeScannerSheetView: View {
     @ObservedObject var viewModel: PantryViewModel
     @State private var scannedBarcode: String = ""
     @State private var showingScanner = false
+    @State private var isProcessingBarcode = false
 
     var body: some View {
         NavigationStack {
@@ -144,6 +155,7 @@ struct BarcodeScannerSheetView: View {
                             Button("Try Again") {
                                 scannedBarcode = ""
                                 viewModel.errorMessage = nil
+                                isProcessingBarcode = false
                                 showingScanner = true
                             }
                             .buttonStyle(.borderedProminent)
@@ -197,12 +209,17 @@ struct BarcodeScannerSheetView: View {
             }
             .sheet(isPresented: $showingScanner) {
                 BarcodeScannerView { barcode in
+                    // Prevent multiple processing of the same scan
+                    guard !isProcessingBarcode else { return }
+
+                    isProcessingBarcode = true
                     scannedBarcode = barcode
                     showingScanner = false
-                    
+
                     // Trigger AI analysis
                     Task {
                         await viewModel.addFromBarcode(barcode: barcode)
+                        isProcessingBarcode = false
                     }
                 }
                 .ignoresSafeArea()

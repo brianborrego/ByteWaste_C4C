@@ -63,7 +63,7 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "FOOD_APP_KEY"
-            value = "1d7a4ef39b5d91968f1104e81b1848c0"
+            value = "d5e2c45aef522057bdd8dd80092eb950"
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
@@ -73,7 +73,7 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "NAVIGATOR_API_KEY"
-            value = "sk-2blAQakgnP15ORa_s0z1hw"
+            value = "sk-AUydy3z6VlN-xwA0cILqRw"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>

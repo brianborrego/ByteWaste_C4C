@@ -131,6 +131,56 @@ fileprivate struct ShelfLifeAIResponse: Codable {
     let shelf_days: Int
     let recommended_storage: String
     let notes: String?
+
+    // Standard initializer for fallback values
+    init(fridge_days: Int, freezer_days: Int, shelf_days: Int, recommended_storage: String, notes: String?) {
+        self.fridge_days = fridge_days
+        self.freezer_days = freezer_days
+        self.shelf_days = shelf_days
+        self.recommended_storage = recommended_storage
+        self.notes = notes
+    }
+
+    // Custom decoding to handle flexible AI responses
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        // Try to decode fridge_days - handle both Int and String
+        if let fridgeInt = try? container.decode(Int.self, forKey: .fridge_days) {
+            fridge_days = fridgeInt
+        } else if let fridgeString = try? container.decode(String.self, forKey: .fridge_days),
+                  let fridgeInt = Int(fridgeString) {
+            fridge_days = fridgeInt
+        } else {
+            throw DecodingError.dataCorruptedError(forKey: .fridge_days, in: container, debugDescription: "fridge_days must be Int or String convertible to Int")
+        }
+
+        // Try to decode freezer_days - handle both Int and String
+        if let freezerInt = try? container.decode(Int.self, forKey: .freezer_days) {
+            freezer_days = freezerInt
+        } else if let freezerString = try? container.decode(String.self, forKey: .freezer_days),
+                  let freezerInt = Int(freezerString) {
+            freezer_days = freezerInt
+        } else {
+            throw DecodingError.dataCorruptedError(forKey: .freezer_days, in: container, debugDescription: "freezer_days must be Int or String convertible to Int")
+        }
+
+        // Try to decode shelf_days - handle both Int and String
+        if let shelfInt = try? container.decode(Int.self, forKey: .shelf_days) {
+            shelf_days = shelfInt
+        } else if let shelfString = try? container.decode(String.self, forKey: .shelf_days),
+                  let shelfInt = Int(shelfString) {
+            shelf_days = shelfInt
+        } else {
+            throw DecodingError.dataCorruptedError(forKey: .shelf_days, in: container, debugDescription: "shelf_days must be Int or String convertible to Int")
+        }
+
+        // Decode recommended_storage
+        recommended_storage = try container.decode(String.self, forKey: .recommended_storage)
+
+        // Decode optional notes
+        notes = try? container.decode(String.self, forKey: .notes)
+    }
 }
 
 // MARK: - Public Result Model
@@ -175,19 +225,39 @@ public class FoodExpirationService {
             throw ServiceError.invalidURL
         }
         
+        print("\n🔍 Fetching food data from Edamam for barcode: \(barcode)")
+        print("   URL: \(url.absoluteString)")
+
         let (data, response) = try await URLSession.shared.data(from: url)
-        
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw ServiceError.apiError("Edamam API returned error")
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            print("❌ Invalid HTTP response from Edamam")
+            throw ServiceError.apiError("Invalid HTTP response")
         }
-        
+
+        print("✅ Edamam API Status: \(httpResponse.statusCode)")
+
+        guard httpResponse.statusCode == 200 else {
+            if let errorString = String(data: data, encoding: .utf8) {
+                print("❌ Edamam error response: \(errorString)")
+            }
+            throw ServiceError.apiError("Edamam API returned status \(httpResponse.statusCode)")
+        }
+
         let decoder = JSONDecoder()
         let edamamResponse = try decoder.decode(EdamamResponse.self, from: data)
-        
+
         guard let food = edamamResponse.hints?.first?.food else {
+            print("❌ No food found in Edamam response")
             throw ServiceError.noResults
         }
-        
+
+        print("✅ Found food: \(food.label)")
+        if let brand = food.brand {
+            print("   Brand: \(brand)")
+        }
+        print("")
+
         return food
     }
     
@@ -213,29 +283,43 @@ public class FoodExpirationService {
         }
         
         let systemPrompt = """
-        You are a food safety expert. Provide shelf life estimates in days for different storage locations.
-        Return ONLY valid JSON matching this exact structure, no additional text:
+        You are a food safety expert specializing in shelf life estimation. Your ONLY job is to return JSON data.
+
+        CRITICAL RULES:
+        1. Return ONLY raw JSON - no markdown, no code blocks, no explanations
+        2. Do NOT include ```json or ``` markers
+        3. Use integer numbers for all day values, never strings
+        4. The "recommended_storage" must be exactly one of: "fridge", "freezer", or "shelf"
+        5. For shelf_days: use 0 if the item CANNOT be stored at room temperature (e.g., dairy, meat, fish)
+        6. Be realistic: milk lasts ~7 days in fridge, not 90 days
+
+        Required JSON structure (copy this EXACTLY):
         {
-          "fridge_days": <number>,
-          "freezer_days": <number>,
-          "shelf_days": <number>,
-          "recommended_storage": "<fridge|freezer|shelf>",
-          "notes": "<brief storage tip>"
+          "fridge_days": 7,
+          "freezer_days": 30,
+          "shelf_days": 0,
+          "recommended_storage": "fridge",
+          "notes": "Keep refrigerated"
         }
         """
-        
+
         let userPrompt = """
-        Estimate shelf life in days for this food product in three storage conditions:
-        1. Refrigerator (fridge_days)
-        2. Freezer (freezer_days)
-        3. Room temperature pantry/shelf (shelf_days)
+        Provide realistic shelf life estimates in days for this food product:
 
-        Also indicate the recommended_storage location (fridge, freezer, or shelf).
-
-        Food Product:
         \(foodDescription)
 
-        Return ONLY the JSON object, no markdown, no explanations.
+        Storage conditions:
+        - fridge_days: How many days in refrigerator (40°F/4°C)
+        - freezer_days: How many days in freezer (0°F/-18°C)
+        - shelf_days: How many days at room temperature (if unsafe, use 0)
+        - recommended_storage: Best storage location ("fridge", "freezer", or "shelf")
+        - notes: Brief storage instruction (1 sentence)
+
+        REMEMBER:
+        - Perishables (meat, dairy, fish, eggs): fridge 2-7 days, shelf_days = 0
+        - Produce: fridge 3-14 days depending on type
+        - Shelf-stable (canned, dry goods): shelf 180-365 days
+        - Return ONLY the JSON object, nothing else
         """
         
         let requestBody = ChatCompletionRequest(
@@ -272,20 +356,77 @@ public class FoodExpirationService {
         
         // Clean up response (remove markdown if present)
         var jsonString = messageContent.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+
+        print("\n" + String(repeating: "=", count: 70))
+        print("🤖 RAW AI RESPONSE:")
+        print(String(repeating: "=", count: 70))
+        print(jsonString)
+        print(String(repeating: "=", count: 70))
+
+        // Remove markdown code blocks
         if jsonString.hasPrefix("```json") {
             jsonString = jsonString.replacingOccurrences(of: "```json", with: "")
         }
         if jsonString.hasPrefix("```") {
             jsonString = jsonString.replacingOccurrences(of: "```", with: "")
         }
+        if jsonString.hasSuffix("```") {
+            jsonString = jsonString.replacingOccurrences(of: "```", with: "")
+        }
+
+        // Remove any leading/trailing whitespace again
         jsonString = jsonString.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-        
+
+        print("\n" + String(repeating: "=", count: 70))
+        print("🧹 CLEANED JSON STRING:")
+        print(String(repeating: "=", count: 70))
+        print(jsonString)
+        print(String(repeating: "=", count: 70) + "\n")
+
         guard let jsonData = jsonString.data(using: String.Encoding.utf8) else {
+            print("❌ Failed to convert cleaned string to Data")
             throw ServiceError.parseError
         }
-        
-        let shelfLifeResponse = try decoder.decode(ShelfLifeAIResponse.self, from: jsonData)
-        return shelfLifeResponse
+
+        // Attempt to decode with detailed error handling
+        do {
+            let shelfLifeResponse = try decoder.decode(ShelfLifeAIResponse.self, from: jsonData)
+
+            print("✅ Successfully decoded AI response:")
+            print("   Fridge: \(shelfLifeResponse.fridge_days) days")
+            print("   Freezer: \(shelfLifeResponse.freezer_days) days")
+            print("   Shelf: \(shelfLifeResponse.shelf_days) days")
+            print("   Recommended: \(shelfLifeResponse.recommended_storage)")
+            if let notes = shelfLifeResponse.notes {
+                print("   Notes: \(notes)")
+            }
+            print("")
+
+            return shelfLifeResponse
+        } catch let DecodingError.keyNotFound(key, context) {
+            print("❌ DECODING ERROR: Missing required key '\(key.stringValue)'")
+            print("   Expected keys: fridge_days, freezer_days, shelf_days, recommended_storage")
+            print("   Context: \(context.debugDescription)")
+            print("   Coding path: \(context.codingPath.map { $0.stringValue }.joined(separator: " -> "))")
+            throw ServiceError.apiError("AI returned incomplete data - missing '\(key.stringValue)'")
+        } catch let DecodingError.typeMismatch(type, context) {
+            print("❌ DECODING ERROR: Type mismatch for type \(type)")
+            print("   Expected: Int for day values, String for recommended_storage")
+            print("   Context: \(context.debugDescription)")
+            print("   Coding path: \(context.codingPath.map { $0.stringValue }.joined(separator: " -> "))")
+            throw ServiceError.apiError("AI returned wrong data type - check the raw response above")
+        } catch let DecodingError.valueNotFound(type, context) {
+            print("❌ DECODING ERROR: Value not found for type \(type)")
+            print("   Context: \(context.debugDescription)")
+            throw ServiceError.apiError("AI returned null/missing value - check the raw response above")
+        } catch let DecodingError.dataCorrupted(context) {
+            print("❌ DECODING ERROR: Data corrupted")
+            print("   Context: \(context.debugDescription)")
+            throw ServiceError.apiError("AI returned invalid JSON format - check the raw response above")
+        } catch {
+            print("❌ UNKNOWN DECODING ERROR: \(error.localizedDescription)")
+            throw ServiceError.apiError("Failed to parse AI response - check console logs above")
+        }
     }
     
     // MARK: - Complete Analysis
@@ -294,8 +435,8 @@ public class FoodExpirationService {
     public func analyzeFood(barcode: String) async throws -> FoodAnalysisResult {
         // Step 1: Fetch food data
         let food = try await fetchFoodData(barcode: barcode)
-        
-        // Step 2: Get AI shelf life estimates
+
+        // Step 2: Get AI shelf life estimates (NO fallback - must work)
         let aiResponse = try await estimateShelfLife(food: food)
         
         // Step 3: Determine storage location
@@ -332,11 +473,12 @@ public class FoodExpirationService {
         let expirationDate = Calendar.current.date(byAdding: .day, value: daysToAdd, to: Date()) ?? Date()
         
         // Step 6: Return result
+        // Note: imageURL can be nil - not all products have images in Edamam database
         return FoodAnalysisResult(
             name: food.label,
             brand: food.brand,
             category: food.categoryLabel ?? food.category,
-            imageURL: food.image,
+            imageURL: food.image,  // Optional - may be nil
             edamamFoodId: food.foodId,
             shelfLifeEstimates: shelfLifeEstimates,
             recommendedStorage: storageLocation,
