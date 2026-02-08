@@ -50,48 +50,6 @@
             ReferencedContainer = "container:ByteWaste_C4C.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <EnvironmentVariables>
-         <EnvironmentVariable
-            key = "EDAMAM_BASE_URL"
-            value = "https://api.edamam.com"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
-            key = "FOOD_APP_ID"
-            value = "8ed2ee10"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
-            key = "FOOD_APP_KEY"
-            value = "d5e2c45aef522057bdd8dd80092eb950"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
-            key = "NAVIGATOR_API_ENDPOINT"
-            value = "https://api.ai.it.ufl.edu/v1"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
-            key = "NAVIGATOR_API_KEY"
-            value = "sk-AUydy3z6VlN-xwA0cILqRw"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
-            key = "EDAMAM_AUTOCOMPLETE_ENDPOINT"
-            value = "/auto-complete"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
-            key = "EDAMAM_NUTRIENTS_ENDPOINT"
-            value = "/api/food-database/v2/nutrients"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
-            key = ""
-            value = ""
-            isEnabled = "YES">
-         </EnvironmentVariable>
-      </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
