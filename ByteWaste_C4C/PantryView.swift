@@ -718,6 +718,7 @@ struct DisposalOptionButton: View {
                     Text(subtitle)
                         .font(.system(size: 13, weight: .regular))
                         .foregroundColor(.appIconGray)
+                        .multilineTextAlignment(.leading)
                         .lineLimit(2)
                 }
 
