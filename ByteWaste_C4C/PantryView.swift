@@ -1,116 +1,141 @@
 import SwiftUI
 
 struct PantryView: View {
-    @StateObject private var model = PantryViewModel()
+    @ObservedObject var viewModel: PantryViewModel
+    @State private var isEditMode = false
+
+    init(viewModel: PantryViewModel) {
+        self.viewModel = viewModel
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                if model.isLoading {
-                    // Loading state
-                    ProgressView("Loading pantry...")
-                } else if model.items.isEmpty {
-                    // Empty state (only shown after loading completes)
-                    VStack(spacing: 12) {
-                        Image(systemName: "tray")
-                            .font(.system(size: 64))
-                            .foregroundColor(.gray.opacity(0.5))
+                // Cream background
+                Color.appCream.ignoresSafeArea()
 
-                        Text("Pantry is empty")
-                            .font(.title2)
-                            .foregroundColor(.gray)
+                VStack(spacing: 0) {
+                    // Custom gradient title with Done button
+                    HStack {
+                        Text("Pantry")
+                            .font(.system(size: 36, weight: .bold))
+                            .foregroundStyle(.linearGradient(
+                                colors: [.appGradientTop, .appGradientBottom],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ))
 
-                        Text("Add an item with the buttons on the top right")
-                            .font(.subheadline)
-                            .foregroundColor(.gray.opacity(0.7))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                } else {
-                    List {
-                        ForEach(model.items) { item in
-                            NavigationLink(destination: PantryItemDetailView(item: item, viewModel: model)) {
-                                PantryItemRow(item: item)
+                        Spacer()
+
+                        if isEditMode {
+                            Button("Done") {
+                                withAnimation {
+                                    isEditMode = false
+                                }
                             }
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 8)
+                            .background(Color.appPrimaryGreen)
+                            .cornerRadius(20)
                         }
-                        .onDelete(perform: model.delete)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 12)
+
+                    if viewModel.isLoading {
+                        // Loading state
+                        Spacer()
+                        ProgressView("Loading pantry...")
+                        Spacer()
+                    } else if viewModel.items.isEmpty {
+                        // Empty state
+                        Spacer()
+                        VStack(spacing: 16) {
+                            Image(systemName: "tray")
+                                .font(.system(size: 64))
+                                .foregroundColor(.appIconGray.opacity(0.5))
+
+                            Text("Pantry is empty")
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.appIconGray)
+
+                            Text("Tap the + button below to add items")
+                                .font(.subheadline)
+                                .foregroundColor(.appIconGray.opacity(0.7))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                        }
+                        Spacer()
+                    } else {
+                        // Items list
+                        ScrollView {
+                            LazyVStack(spacing: 12) {
+                                ForEach(viewModel.items, id: \.id) { item in
+                                    ZStack(alignment: .topLeading) {
+                                        // Card with navigation
+                                        NavigationLink(destination: PantryItemDetailView(item: item, viewModel: viewModel)) {
+                                            PantryItemCard(item: item)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .disabled(isEditMode)
+                                        .simultaneousGesture(
+                                            LongPressGesture(minimumDuration: 2.0)
+                                                .onEnded { _ in
+                                                    print("🔴 Long press detected!")
+                                                    withAnimation(.spring()) {
+                                                        isEditMode = true
+                                                    }
+                                                }
+                                        )
+
+                                        // Delete button overlay when in edit mode
+                                        if isEditMode {
+                                            Button {
+                                                withAnimation {
+                                                    viewModel.disposeItem(item, method: .thrownAway)
+                                                }
+                                            } label: {
+                                                ZStack {
+                                                    Circle()
+                                                        .fill(Color.red)
+                                                        .frame(width: 30, height: 30)
+                                                    Image(systemName: "minus")
+                                                        .font(.system(size: 16, weight: .bold))
+                                                        .foregroundColor(.white)
+                                                }
+                                            }
+                                            .offset(x: 8, y: 8)
+                                            .transition(.scale)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 80) // Extra padding for tab bar
+                        }
                     }
                 }
             }
-            .navigationTitle("Pantry")
-            .toolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {
-                        model.isPresentingScannerSheet = true
-                    } label: {
-                        Label("Scan", systemImage: "barcode.viewfinder")
-                    }
-                    Button {
-                        model.isPresentingAddSheet = true
-                    } label: {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-            .sheet(isPresented: $model.isPresentingAddSheet) {
-                AddPantryItemView(
-                    viewModel: model,
-                    initialBarcode: model.barcodeForManualEntry
-                )
-            }
-            .onChange(of: model.isPresentingAddSheet) { _, isPresenting in
-                // Clear barcode when sheet is dismissed
-                if !isPresenting {
-                    model.barcodeForManualEntry = nil
-                }
-            }
-            .sheet(isPresented: $model.isPresentingScannerSheet) {
-                // Use the new Real-time Camera with live detection
-                RealtimeCameraView(viewModel: model)
-            }
+            .navigationBarHidden(true)
             .task {
-                await model.loadItems()
+                await viewModel.loadItems()
             }
         }
     }
 }
 
-// MARK: - Pantry Item Row
-private struct PantryItemRow: View {
+// MARK: - Pantry Item Card (New Design)
+private struct PantryItemCard: View {
     let item: PantryItem
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.name)
-                        .font(.headline)
-
-                    if let brand = item.brand {
-                        Text(brand)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    HStack(spacing: 8) {
-                        Text("\(item.storageLocation.icon) \(item.storageLocation.rawValue.capitalized)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-
-                        if !item.isExpired {
-                            Text("• \(item.formattedTimeRemaining) left")
-                                .font(.caption)
-                                .foregroundColor(item.urgencyColor)
-                        } else {
-                            Text("• Expired")
-                                .font(.caption)
-                                .foregroundColor(.red)
-                        }
-                    }
-                }
-
-                Spacer()
-
                 // Thumbnail if available
                 if let imageURL = item.imageURL, let url = URL(string: imageURL) {
                     AsyncImage(url: url) { image in
@@ -120,26 +145,72 @@ private struct PantryItemRow: View {
                     } placeholder: {
                         Color.gray.opacity(0.2)
                     }
-                    .frame(width: 50, height: 50)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .frame(width: 60, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                } else {
+                    // Placeholder icon
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.appIconGray.opacity(0.15))
+                        .frame(width: 60, height: 60)
+                        .overlay(
+                            Image(systemName: "photo")
+                                .font(.system(size: 24))
+                                .foregroundColor(.appIconGray.opacity(0.5))
+                        )
                 }
-            }
-            .padding(.vertical, 4)
 
-            // Progress bar showing amount remaining
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(item.name)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.black)
+
+                    if let brand = item.brand {
+                        Text(brand)
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                    }
+
+                    HStack(spacing: 8) {
+                        Text("\(item.storageLocation.icon) \(item.storageLocation.rawValue.capitalized)")
+                            .font(.system(size: 13))
+                            .foregroundColor(.appIconGray)
+
+                        if !item.isExpired {
+                            Text("• \(item.formattedTimeRemaining)")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(item.urgencyColor)
+                        } else {
+                            Text("• Expired")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.red)
+                        }
+                    }
+                }
+
+                Spacer()
+
+                // Chevron
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14))
+                    .foregroundColor(.appIconGray.opacity(0.5))
+            }
+            .padding(16)
+
+            // Progress bar
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(height: 3)
+                        .fill(Color.gray.opacity(0.15))
+                        .frame(height: 4)
 
                     Rectangle()
-                        .fill(item.amountRemaining > 0.5 ? Color.green : item.amountRemaining > 0.25 ? Color.orange : Color.red)
-                        .frame(width: geometry.size.width * item.amountRemaining, height: 3)
+                        .fill(item.amountRemaining > 0.5 ? Color.appPrimaryGreen : item.amountRemaining > 0.25 ? Color.orange : Color.red)
+                        .frame(width: geometry.size.width * item.amountRemaining, height: 4)
                 }
             }
-            .frame(height: 3)
+            .frame(height: 4)
         }
+        .cardStyle()
     }
 }
 
@@ -161,37 +232,51 @@ private struct PantryItemDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // Product image at top
-                if let imageURL = item.imageURL, let url = URL(string: imageURL) {
-                    AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                    } placeholder: {
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.2))
-                            .overlay(
-                                ProgressView()
-                            )
+        ZStack {
+            // Cream background
+            Color.appCream.ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Product image at top
+                    if let imageURL = item.imageURL, let url = URL(string: imageURL) {
+                        AsyncImage(url: url) { phase in
+                            if let image = phase.image {
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                            } else {
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.2))
+                                    .overlay(
+                                        ProgressView()
+                                    )
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 250)
+                        .background(Color.clear)
+                        .cornerRadius(16)
+                        .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
+                        .padding(.horizontal, 16)
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 250)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal)
-                }
 
                 // Item information
                 VStack(spacing: 12) {
                     Text(item.name)
                         .font(.title2)
                         .fontWeight(.bold)
+                        .foregroundStyle(.linearGradient(
+                            colors: [.appGradientTop, .appGradientBottom],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ))
 
                     if let brand = item.brand {
                         Text(brand)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .fontWeight(.bold)
+                            .foregroundColor(.appIconGray)
                     }
 
                     HStack(spacing: 16) {
@@ -200,7 +285,8 @@ private struct PantryItemDetailView: View {
                                 .font(.title2)
                             Text(item.storageLocation.displayName)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .fontWeight(.bold)
+                                .foregroundColor(.appIconGray)
                         }
 
                         Divider()
@@ -213,23 +299,21 @@ private struct PantryItemDetailView: View {
                                 .foregroundColor(item.urgencyColor)
                             Text(item.isExpired ? "Expired" : "Remaining")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .fontWeight(.bold)
+                                .foregroundColor(.appIconGray)
                         }
                     }
                     .padding()
-                    .background(Color.gray.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 16)
 
                 // Amount remaining slider
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        Text("Amount Left:")
-                            .font(.headline)
                         Spacer()
                         Text("\(Int(amountRemaining * 100))%")
                             .font(.headline)
+                            .fontWeight(.bold)
                             .foregroundColor(amountRemaining > 0.5 ? .green : amountRemaining > 0.25 ? .orange : .red)
                     }
 
@@ -245,79 +329,93 @@ private struct PantryItemDetailView: View {
                             }
                         }
                 }
-                .padding()
-                .background(Color.gray.opacity(0.05))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal)
+                .padding(.horizontal, 16)
 
                 // Additional info
                 if let category = item.category {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Category")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(category)
-                            .font(.body)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(Color.gray.opacity(0.05))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal)
+                    Text(category)
+                        .font(.body)
+                        .fontWeight(.bold)
+                        .foregroundColor(.appIconGray)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
                 }
 
                 if let notes = item.notes {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Storage Notes")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(notes)
-                            .font(.body)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(Color.gray.opacity(0.05))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal)
+                    Text(notes)
+                        .font(.body)
+                        .fontWeight(.bold)
+                        .foregroundColor(.appIconGray)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
                 }
 
                 if let sustainabilityNotes = item.sustainabilityNotes, !sustainabilityNotes.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Sustainability Notes")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        HStack(alignment: .top, spacing: 8) {
-                            Text("♻️")
-                                .font(.title3)
-                            Text(sustainabilityNotes)
-                                .font(.body)
-                        }
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("♻️")
+                            .font(.title3)
+                        Text(sustainabilityNotes)
+                            .font(.body)
+                            .fontWeight(.bold)
+                            .foregroundColor(.appIconGray)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(Color.green.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal)
+                    .padding(.horizontal, 16)
                 }
 
-                Spacer()
+                    Spacer()
+                }
+                .padding(.top)
             }
-            .padding(.top)
         }
-        .navigationTitle("Item Details")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Color.appCream, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Item Details")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundStyle(.linearGradient(
+                        colors: [.appGradientTop, .appGradientBottom],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ))
+            }
+        }
         .alert("How was this item used?", isPresented: $showingDisposalAlert) {
             Button("Used Fully") {
-                viewModel.disposeItem(item, method: .usedFully)
-                dismiss()
+                Task {
+                    await MainActor.run {
+                        viewModel.disposeItem(item, method: .usedFully)
+                    }
+                    try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second delay
+                    await MainActor.run {
+                        dismiss()
+                    }
+                }
             }
             Button("Used Partially") {
-                viewModel.disposeItem(item, method: .usedPartially)
-                dismiss()
+                Task {
+                    await MainActor.run {
+                        viewModel.disposeItem(item, method: .usedPartially)
+                    }
+                    try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second delay
+                    await MainActor.run {
+                        dismiss()
+                    }
+                }
             }
             Button("Thrown Away", role: .destructive) {
-                viewModel.disposeItem(item, method: .thrownAway)
-                dismiss()
+                Task {
+                    await MainActor.run {
+                        viewModel.disposeItem(item, method: .thrownAway)
+                    }
+                    try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second delay
+                    await MainActor.run {
+                        dismiss()
+                    }
+                }
             }
             Button("Cancel", role: .cancel) {
                 // Reset slider to previous value
@@ -330,7 +428,7 @@ private struct PantryItemDetailView: View {
     }
 }
 
-private struct AddPantryItemView: View {
+struct AddPantryItemView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: PantryViewModel
 
@@ -354,88 +452,168 @@ private struct AddPantryItemView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Item Name") {
-                    TextField("Enter food name", text: $name)
-                        .textContentType(.none)
-                }
+            ZStack {
+                // Cream background
+                Color.appCream.ignoresSafeArea()
 
-                Section("Additional Context (Optional)") {
-                    TextEditor(text: $additionalContext)
-                        .frame(minHeight: 80)
-                        .overlay(alignment: .topLeading) {
-                            if additionalContext.isEmpty {
-                                Text("e.g., organic, 6 count, brand name...")
-                                    .foregroundColor(.gray.opacity(0.5))
-                                    .padding(.top, 8)
-                                    .padding(.leading, 4)
-                                    .allowsHitTesting(false)
+                ScrollView {
+                    VStack(spacing: 16) {
+                        // Item Name
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Item Name *")
+                                .font(.caption)
+                                .foregroundStyle(.linearGradient(
+                                    colors: [.appGradientTop, .appGradientBottom],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ))
+                                .padding(.horizontal, 16)
+
+                            ZStack(alignment: .leading) {
+                                if name.isEmpty {
+                                    Text("Enter food name")
+                                        .foregroundColor(.gray.opacity(0.5))
+                                        .padding(.leading, 4)
+                                }
+                                TextField("", text: $name)
+                                    .textContentType(.none)
                             }
+                            .padding()
+                            .cardStyle()
                         }
-                }
 
-                Section("Barcode (Optional)") {
-                    HStack {
-                        TextField("Scan or enter barcode", text: $barcode)
-                            .keyboardType(.numberPad)
+                        // Additional Context
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Additional Context")
+                                .font(.caption)
+                                .foregroundStyle(.linearGradient(
+                                    colors: [.appGradientTop, .appGradientBottom],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ))
+                                .padding(.horizontal, 16)
 
-                        Button {
-                            showingBarcodeScanner = true
-                        } label: {
-                            Image(systemName: "barcode.viewfinder")
-                                .font(.title3)
-                        }
-                    }
-                }
+                            ZStack(alignment: .topLeading) {
+                                TextEditor(text: $additionalContext)
+                                    .frame(minHeight: 80)
+                                    .scrollContentBackground(.hidden)
 
-                Section("Photo (Optional)") {
-                    if let image = selectedImage {
-                        HStack {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(height: 100)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                            Spacer()
-
-                            Button("Remove") {
-                                selectedImage = nil
+                                if additionalContext.isEmpty {
+                                    Text("e.g., organic, 6 count, brand name...")
+                                        .foregroundColor(.gray.opacity(0.5))
+                                        .padding(.top, 8)
+                                        .padding(.leading, 4)
+                                        .allowsHitTesting(false)
+                                }
                             }
-                            .foregroundColor(.red)
+                            .padding()
+                            .cardStyle()
                         }
-                    } else {
-                        HStack {
-                            Button {
-                                showingCamera = true
-                            } label: {
-                                Label("Take Photo", systemImage: "camera")
-                            }
 
-                            Spacer()
+                        // Barcode
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Barcode")
+                                .font(.caption)
+                                .foregroundStyle(.linearGradient(
+                                    colors: [.appGradientTop, .appGradientBottom],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ))
+                                .padding(.horizontal, 16)
 
-                            Button {
-                                showingImagePicker = true
-                            } label: {
-                                Label("Choose from Library", systemImage: "photo")
+                            HStack {
+                                ZStack(alignment: .leading) {
+                                    if barcode.isEmpty {
+                                        Text("Scan or enter barcode")
+                                            .foregroundColor(.gray.opacity(0.5))
+                                            .padding(.leading, 4)
+                                    }
+                                    TextField("", text: $barcode)
+                                        .keyboardType(.numberPad)
+                                }
+
+                                Button {
+                                    showingBarcodeScanner = true
+                                } label: {
+                                    Image(systemName: "barcode.viewfinder")
+                                        .font(.title3)
+                                        .foregroundColor(.appPrimaryGreen)
+                                }
                             }
+                            .padding()
+                            .cardStyle()
                         }
-                    }
-                }
 
-                if viewModel.isAnalyzing {
-                    Section {
-                        HStack {
-                            Spacer()
-                            ProgressView()
+                        // Photo
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Photo")
+                                .font(.caption)
+                                .foregroundStyle(.linearGradient(
+                                    colors: [.appGradientTop, .appGradientBottom],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ))
+                                .padding(.horizontal, 16)
+
+                            if let image = selectedImage {
+                                HStack {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(height: 100)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                                    Spacer()
+
+                                    Button("Remove") {
+                                        selectedImage = nil
+                                    }
+                                    .foregroundColor(.red)
+                                }
                                 .padding()
-                            Spacer()
+                                .cardStyle()
+                            } else {
+                                HStack(spacing: 12) {
+                                    Button {
+                                        showingCamera = true
+                                    } label: {
+                                        Label("Take Photo", systemImage: "camera")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(.appPrimaryGreen)
+
+                                    Button {
+                                        showingImagePicker = true
+                                    } label: {
+                                        Label("Library", systemImage: "photo")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(.appPrimaryGreen)
+                                }
+                                .padding(.horizontal, 16)
+                            }
+                        }
+
+                        if viewModel.isAnalyzing {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                Spacer()
+                            }
+                            .padding()
+                            .cardStyle()
                         }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 20)
                 }
             }
             .navigationTitle("Add Item Manually")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color.appCream, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -450,6 +628,8 @@ private struct AddPantryItemView: View {
                         }
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isAnalyzing)
+                    .foregroundColor(.appPrimaryGreen)
+                    .fontWeight(.semibold)
                 }
             }
             .sheet(isPresented: $showingBarcodeScanner) {
@@ -500,5 +680,5 @@ private struct ManualEntryBarcodeScannerView: View {
 }
 
 #Preview {
-    PantryView()
+    PantryView(viewModel: PantryViewModel())
 }

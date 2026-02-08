@@ -23,4 +23,24 @@ struct Config {
     // Navigator AI API
     static let navigatorAPIEndpoint = "https://api.ai.it.ufl.edu/v1"
     static let navigatorAPIKey = "sk-AUydy3z6VlN-xwA0cILqRw"
+
+    // Remove-bg api token
+    static let REPLICATE_API_TOKEN = "r8_a7G3ANUraYCX8cOXR8miXMUjM5cWVPn3scSfS"
+    static let REMOVE_BG = false
+
+    // MARK: - App Color Palette
+    // Primary Colors
+    static let primaryDarkGreen = "#405C2C"
+    static let secondaryLightGreen = "#B1F04E"
+
+    // Backgrounds
+    static let creamBackground = "#F9F5F0"
+    static let white = "#FFFFFF"
+
+    // UI Elements
+    static let iconGray = "#8F9096"
+
+    // Gradients
+    static let gradientBrownTop = "#712E1E"
+    static let gradientBrownBottom = "#3C1810"
 }
