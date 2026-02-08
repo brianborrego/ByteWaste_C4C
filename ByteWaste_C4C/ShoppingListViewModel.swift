@@ -39,16 +39,25 @@ class ShoppingListViewModel: ObservableObject {
     // MARK: - Add Item
 
     func addItem(name: String, sourceRecipeId: String? = nil, sourceRecipeName: String? = nil) {
-        let newItem = ShoppingListItem(
-            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-            sourceRecipeId: sourceRecipeId,
-            sourceRecipeName: sourceRecipeName
-        )
-
-        // Optimistic update
-        items.insert(newItem, at: 0)
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
 
         Task {
+            // Fetch image URL from Edamam
+            let imageURL = await FoodImageService.shared.fetchFoodImageURL(for: trimmedName)
+
+            let newItem = ShoppingListItem(
+                name: trimmedName,
+                sourceRecipeId: sourceRecipeId,
+                sourceRecipeName: sourceRecipeName,
+                imageURL: imageURL
+            )
+
+            // Add to UI
+            await MainActor.run {
+                items.insert(newItem, at: 0)
+            }
+
+            // Insert to database
             do {
                 try await supabase.insertShoppingListItem(newItem)
             } catch {
