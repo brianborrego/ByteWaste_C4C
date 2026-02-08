@@ -192,14 +192,14 @@ class PantryViewModel: ObservableObject {
                 brand: result.brand,
                 notes: result.notes
             )
-            
+
+            // Save to Supabase
+            try await supabase.insertItem(newItem)
+
             await MainActor.run {
                 items.append(newItem)
                 isAnalyzing = false
                 isPresentingScannerSheet = false
-                
-                // Print JSON for debugging
-                printItemJSON(newItem)
             }
         } catch {
             await MainActor.run {
