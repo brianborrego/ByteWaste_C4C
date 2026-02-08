@@ -32,6 +32,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
     var brand: String?
     var notes: String?
     var sustainabilityNotes: String?
+    var genericName: String?
 
     // Amount tracking
     var amountRemaining: Double  // 0.0 to 1.0 (percentage)
@@ -47,6 +48,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
         case edamamFoodId = "edamam_food_id"
         case imageURL = "image_url"
         case sustainabilityNotes = "sustainability_notes"
+        case genericName = "generic_name"
         case amountRemaining = "amount_remaining"
         case initialQuantityAmount = "initial_quantity_amount"
     }
@@ -70,6 +72,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
         brand = try? container.decode(String.self, forKey: .brand)
         notes = try? container.decode(String.self, forKey: .notes)
         sustainabilityNotes = try? container.decode(String.self, forKey: .sustainabilityNotes)
+        genericName = try? container.decode(String.self, forKey: .genericName)
         initialQuantityAmount = try? container.decode(Double.self, forKey: .initialQuantityAmount)
         barcode = try? container.decode(String.self, forKey: .barcode)
 
@@ -124,6 +127,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
         brand: String? = nil,
         notes: String? = nil,
         sustainabilityNotes: String? = nil,
+        genericName: String? = nil,
         amountRemaining: Double = 1.0,
         initialQuantityAmount: Double? = nil
     ) {
@@ -141,6 +145,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
         self.brand = brand
         self.notes = notes
         self.sustainabilityNotes = sustainabilityNotes
+        self.genericName = genericName
         self.amountRemaining = amountRemaining
         self.initialQuantityAmount = initialQuantityAmount
     }
@@ -156,25 +161,104 @@ class PantryViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var barcodeForManualEntry: String?  // Barcode to pre-fill in manual entry
 
+    var onItemAdded: (([PantryItem]) -> Void)?
+    var onItemsRemoved: (([PantryItem]) -> Void)?
+
     private let foodService = FoodExpirationService()
     private let supabase = SupabaseService.shared
+    // Cache flag to avoid reloading pantry on tab switches
+    private(set) var hasInitializedPantry = false
 
     // MARK: - Load from Supabase
 
     func loadItems() async {
+        // Skip if already loaded (cached)
+        if hasInitializedPantry {
+            print("⚡ Pantry already cached, skipping reload")
+            return
+        }
+
         print("🔄 Loading items from Supabase...")
         await MainActor.run { isLoading = true }
+        // Capture previous state so we can notify callbacks about changes
+        let previousItems = items
         do {
             let fetched = try await supabase.fetchItems()
             print("✅ Successfully fetched \(fetched.count) items from Supabase")
             await MainActor.run {
                 items = fetched
                 isLoading = false
+                hasInitializedPantry = true
+
+                // Notify listeners about additions/removals compared to previous snapshot
+                let previousIDs = Set(previousItems.map { $0.id })
+                let fetchedIDs = Set(fetched.map { $0.id })
+
+                let removed = previousIDs.subtracting(fetchedIDs)
+                let added = fetchedIDs.subtracting(previousIDs)
+
+                if !removed.isEmpty {
+                    onItemsRemoved?(items)
+                } else if !added.isEmpty {
+                    onItemAdded?(items)
+                }
             }
         } catch {
+            // Ignore cancellation errors (tab switching, view lifecycle, pull-to-refresh cancelled)
+            if (error is CancellationError) || ((error as NSError).domain == NSURLErrorDomain && (error as NSError).code == NSURLErrorCancelled) {
+                print("ℹ️ Load pantry items request was cancelled")
+                await MainActor.run { isLoading = false }
+                return
+            }
+
             print("❌ Failed to load items from Supabase: \(error)")
             await MainActor.run {
                 errorMessage = "Failed to load items: \(error.localizedDescription)"
+                isLoading = false
+            }
+        }
+    }
+
+    /// Force-refresh pantry from the database (clears cache and reloads).
+    /// Uses Task.detached so the Supabase fetch survives SwiftUI .refreshable cancellation.
+    func refreshItems() async {
+        hasInitializedPantry = false
+        await MainActor.run { isLoading = true }
+
+        let result: Result<[PantryItem], Error> = await withCheckedContinuation { continuation in
+            Task.detached { [supabase] in
+                do {
+                    let fetched = try await supabase.fetchItems()
+                    continuation.resume(returning: .success(fetched))
+                } catch {
+                    continuation.resume(returning: .failure(error))
+                }
+            }
+        }
+
+        switch result {
+        case .success(let fetched):
+            let previousItems = items
+            await MainActor.run {
+                items = fetched
+                isLoading = false
+                hasInitializedPantry = true
+
+                let previousIDs = Set(previousItems.map { $0.id })
+                let fetchedIDs = Set(fetched.map { $0.id })
+                let removed = previousIDs.subtracting(fetchedIDs)
+                let added = fetchedIDs.subtracting(previousIDs)
+
+                if !removed.isEmpty {
+                    onItemsRemoved?(items)
+                } else if !added.isEmpty {
+                    onItemAdded?(items)
+                }
+            }
+        case .failure(let error):
+            print("❌ Failed to refresh items from Supabase: \(error)")
+            await MainActor.run {
+                errorMessage = "Failed to refresh items: \(error.localizedDescription)"
                 isLoading = false
             }
         }
@@ -185,6 +269,7 @@ class PantryViewModel: ObservableObject {
     func add(_ item: PantryItem) {
         items.append(item)
         isPresentingAddSheet = false
+        onItemAdded?(items)
         Task {
             do {
                 try await supabase.insertItem(item)
@@ -256,7 +341,8 @@ class PantryViewModel: ObservableObject {
                 quantity: "1",
                 brand: result.brand,
                 notes: result.notes,
-                sustainabilityNotes: result.sustainabilityNotes
+                sustainabilityNotes: result.sustainabilityNotes,
+                genericName: result.genericName
             )
 
             // Save to Supabase
@@ -266,6 +352,7 @@ class PantryViewModel: ObservableObject {
                 items.append(newItem)
                 isAnalyzing = false
                 isPresentingScannerSheet = false
+                onItemAdded?(items)
             }
         } catch {
             // Check if error is "no results" or 404 - if so, open manual entry with barcode pre-filled
@@ -331,7 +418,8 @@ class PantryViewModel: ObservableObject {
                 quantity: "1",
                 brand: result.brand,
                 notes: result.notes,
-                sustainabilityNotes: result.sustainabilityNotes
+                sustainabilityNotes: result.sustainabilityNotes,
+                genericName: result.genericName
             )
 
             // Save to Supabase
@@ -341,6 +429,7 @@ class PantryViewModel: ObservableObject {
                 items.append(newItem)
                 isAnalyzing = false
                 isPresentingScannerSheet = false
+                onItemAdded?(items)
             }
         } catch {
             await MainActor.run {
@@ -426,6 +515,8 @@ class PantryViewModel: ObservableObject {
     func delete(at offsets: IndexSet) {
         let itemsToDelete = offsets.map { items[$0] }
         items.remove(atOffsets: offsets)
+        // Notify listeners about the removal (pass remaining items)
+        onItemsRemoved?(items)
         Task {
             for item in itemsToDelete {
                 do {
@@ -465,6 +556,8 @@ class PantryViewModel: ObservableObject {
         // Optimistic removal from local array
         if let index = items.firstIndex(where: { $0.id == item.id }) {
             items.remove(at: index)
+            // Notify listeners after optimistic removal
+            onItemsRemoved?(items)
         }
 
         // Delete from Supabase

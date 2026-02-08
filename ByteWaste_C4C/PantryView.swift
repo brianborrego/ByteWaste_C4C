@@ -4,10 +4,6 @@ struct PantryView: View {
     @ObservedObject var viewModel: PantryViewModel
     @State private var isEditMode = false
 
-    init(viewModel: PantryViewModel) {
-        self.viewModel = viewModel
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -117,6 +113,9 @@ struct PantryView: View {
                             }
                             .padding(.horizontal, 16)
                             .padding(.bottom, 80) // Extra padding for tab bar
+                        }
+                        .refreshable {
+                            await viewModel.refreshItems()
                         }
                     }
                 }

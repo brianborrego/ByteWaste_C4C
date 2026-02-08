@@ -10,19 +10,19 @@ import SwiftUI
 // MARK: - Color Extensions
 extension Color {
     // Primary Colors
-    static let appPrimaryGreen = Color(hex: Config.primaryDarkGreen)
-    static let appSecondaryGreen = Color(hex: Config.secondaryLightGreen)
+    static let appPrimaryGreen = Color(hex: AppColors.primaryDarkGreen)
+    static let appSecondaryGreen = Color(hex: AppColors.secondaryLightGreen)
 
     // Backgrounds
-    static let appCream = Color(hex: Config.creamBackground)
-    static let appWhite = Color(hex: Config.white)
+    static let appCream = Color(hex: AppColors.creamBackground)
+    static let appWhite = Color(hex: AppColors.white)
 
     // UI Elements
-    static let appIconGray = Color(hex: Config.iconGray)
+    static let appIconGray = Color(hex: AppColors.iconGray)
 
     // Gradients
-    static let appGradientTop = Color(hex: Config.gradientBrownTop)
-    static let appGradientBottom = Color(hex: Config.gradientBrownBottom)
+    static let appGradientTop = Color(hex: AppColors.gradientBrownTop)
+    static let appGradientBottom = Color(hex: AppColors.gradientBrownBottom)
 
     // Helper initializer for hex colors
     init(hex: String) {
