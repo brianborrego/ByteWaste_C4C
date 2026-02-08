@@ -53,8 +53,15 @@ struct PantryView: View {
                 }
             }
             .sheet(isPresented: $model.isPresentingAddSheet) {
-                AddPantryItemView { newItem in
-                    model.add(newItem)
+                AddPantryItemView(
+                    viewModel: model,
+                    initialBarcode: model.barcodeForManualEntry
+                )
+            }
+            .onChange(of: model.isPresentingAddSheet) { _, isPresenting in
+                // Clear barcode when sheet is dismissed
+                if !isPresenting {
+                    model.barcodeForManualEntry = nil
                 }
             }
             .sheet(isPresented: $model.isPresentingScannerSheet) {
@@ -325,61 +332,172 @@ private struct PantryItemDetailView: View {
 
 private struct AddPantryItemView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject var viewModel: PantryViewModel
 
     @State private var name: String = ""
-    @State private var quantity: String = "1"
-    @State private var storageLocation: StorageLocation = .shelf
+    @State private var additionalContext: String = ""
+    @State private var barcode: String = ""
+    @State private var showingBarcodeScanner = false
+    @State private var showingImagePicker = false
+    @State private var showingCamera = false
+    @State private var selectedImage: UIImage?
 
-    var onAdd: (PantryItem) -> Void
+    // Initial barcode to pre-fill (for barcode-not-found flow)
+    var initialBarcode: String?
+
+    init(viewModel: PantryViewModel, initialBarcode: String? = nil) {
+        self.viewModel = viewModel
+        self.initialBarcode = initialBarcode
+        _barcode = State(initialValue: initialBarcode ?? "")
+        print("📝 AddPantryItemView initialized with barcode: \(initialBarcode ?? "nil")")
+    }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Item") {
-                    TextField("Name", text: $name)
+                Section("Item Name") {
+                    TextField("Enter food name", text: $name)
+                        .textContentType(.none)
                 }
-                
-                Section("Storage") {
-                    Picker("Location", selection: $storageLocation) {
-                        ForEach(StorageLocation.allCases, id: \.self) { location in
-                            Text("\(location.icon) \(location.displayName)").tag(location)
+
+                Section("Additional Context (Optional)") {
+                    TextEditor(text: $additionalContext)
+                        .frame(minHeight: 80)
+                        .overlay(alignment: .topLeading) {
+                            if additionalContext.isEmpty {
+                                Text("e.g., organic, 6 count, brand name...")
+                                    .foregroundColor(.gray.opacity(0.5))
+                                    .padding(.top, 8)
+                                    .padding(.leading, 4)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                }
+
+                Section("Barcode (Optional)") {
+                    HStack {
+                        TextField("Scan or enter barcode", text: $barcode)
+                            .keyboardType(.numberPad)
+
+                        Button {
+                            showingBarcodeScanner = true
+                        } label: {
+                            Image(systemName: "barcode.viewfinder")
+                                .font(.title3)
                         }
                     }
                 }
-                
-                Section("Quantity") {
-                    TextField("Quantity", text: $quantity)
-                        .keyboardType(.numberPad)
+
+                Section("Photo (Optional)") {
+                    if let image = selectedImage {
+                        HStack {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(height: 100)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                            Spacer()
+
+                            Button("Remove") {
+                                selectedImage = nil
+                            }
+                            .foregroundColor(.red)
+                        }
+                    } else {
+                        HStack {
+                            Button {
+                                showingCamera = true
+                            } label: {
+                                Label("Take Photo", systemImage: "camera")
+                            }
+
+                            Spacer()
+
+                            Button {
+                                showingImagePicker = true
+                            } label: {
+                                Label("Choose from Library", systemImage: "photo")
+                            }
+                        }
+                    }
+                }
+
+                if viewModel.isAnalyzing {
+                    Section {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .padding()
+                            Spacer()
+                        }
+                    }
                 }
             }
             .navigationTitle("Add Item Manually")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .disabled(viewModel.isAnalyzing)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
-                        // Create a basic item (without AI analysis)
-                        let expirationDate = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
-                        let estimates = ShelfLifeEstimates(fridge: 7, freezer: 30, shelf: 7)
-                        
-                        let item = PantryItem(
-                            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                            storageLocation: storageLocation,
-                            currentExpirationDate: expirationDate,
-                            shelfLifeEstimates: estimates,
-                            quantity: quantity
-                        )
-                        onAdd(item)
-                        dismiss()
+                        Task {
+                            await addItem()
+                        }
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isAnalyzing)
                 }
+            }
+            .sheet(isPresented: $showingBarcodeScanner) {
+                ManualEntryBarcodeScannerView(scannedBarcode: $barcode)
+            }
+            .sheet(isPresented: $showingImagePicker) {
+                ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
+            }
+            .sheet(isPresented: $showingCamera) {
+                ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
             }
         }
     }
+
+    private func addItem() async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedContext = additionalContext.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBarcode = barcode.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Convert UIImage to URL if needed (for now, we'll skip upload and just use nil)
+        let imageURL: String? = nil  // TODO: Upload image to storage and get URL
+
+        await viewModel.addFromManualEntry(
+            name: trimmedName,
+            additionalContext: trimmedContext,
+            barcode: trimmedBarcode.isEmpty ? nil : trimmedBarcode,
+            imageURL: imageURL
+        )
+    }
 }
 
+
+// MARK: - Manual Entry Barcode Scanner
+private struct ManualEntryBarcodeScannerView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var scannedBarcode: String
+    @State private var hasScannedOnce = false
+
+    var body: some View {
+        BarcodeScannerView { barcode in
+            guard !hasScannedOnce else { return }
+            hasScannedOnce = true
+            scannedBarcode = barcode
+            dismiss()
+        }
+        .ignoresSafeArea()
+    }
+}
 
 #Preview {
     PantryView()

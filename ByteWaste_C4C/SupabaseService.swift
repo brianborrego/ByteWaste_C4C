@@ -32,6 +32,25 @@ class SupabaseService {
         return result
     }
 
+    func fetchItemByBarcode(_ barcode: String) async throws -> PantryItem? {
+        print("🔍 Searching for barcode \(barcode) in Supabase")
+        let result: [PantryItem] = try await client
+            .from("pantry_items")
+            .select()
+            .eq("barcode", value: barcode)
+            .limit(1)
+            .execute()
+            .value
+
+        if let item = result.first {
+            print("✅ Found item with barcode: \(item.name)")
+            return item
+        } else {
+            print("❌ No item found with barcode: \(barcode)")
+            return nil
+        }
+    }
+
     func insertItem(_ item: PantryItem) async throws {
         print("➕ Inserting item to Supabase: \(item.name)")
         try await client

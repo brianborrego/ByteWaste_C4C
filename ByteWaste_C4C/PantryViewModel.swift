@@ -25,6 +25,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
     var edamamFoodId: String?
     var imageURL: String?
     var category: String?
+    var barcode: String?  // UPC/EAN barcode for tracking
 
     // Optional
     var quantity: String?
@@ -38,7 +39,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
 
     // Map Swift camelCase to DB snake_case columns
     enum CodingKeys: String, CodingKey {
-        case id, name, category, quantity, brand, notes
+        case id, name, category, quantity, brand, notes, barcode
         case storageLocation = "storage_location"
         case scanDate = "scan_date"
         case currentExpirationDate = "current_expiration_date"
@@ -70,6 +71,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
         notes = try? container.decode(String.self, forKey: .notes)
         sustainabilityNotes = try? container.decode(String.self, forKey: .sustainabilityNotes)
         initialQuantityAmount = try? container.decode(Double.self, forKey: .initialQuantityAmount)
+        barcode = try? container.decode(String.self, forKey: .barcode)
 
         // amountRemaining with default value of 1.0 if missing/NULL
         amountRemaining = (try? container.decode(Double.self, forKey: .amountRemaining)) ?? 1.0
@@ -117,6 +119,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
         edamamFoodId: String? = nil,
         imageURL: String? = nil,
         category: String? = nil,
+        barcode: String? = nil,
         quantity: String? = nil,
         brand: String? = nil,
         notes: String? = nil,
@@ -133,6 +136,7 @@ struct PantryItem: Identifiable, Equatable, Codable {
         self.edamamFoodId = edamamFoodId
         self.imageURL = imageURL
         self.category = category
+        self.barcode = barcode
         self.quantity = quantity
         self.brand = brand
         self.notes = notes
@@ -150,6 +154,7 @@ class PantryViewModel: ObservableObject {
     @Published var isAnalyzing = false
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var barcodeForManualEntry: String?  // Barcode to pre-fill in manual entry
 
     private let foodService = FoodExpirationService()
     private let supabase = SupabaseService.shared
@@ -201,6 +206,41 @@ class PantryViewModel: ObservableObject {
         }
 
         do {
+            // First, check if this barcode already exists in Supabase
+            if let cachedItem = try await supabase.fetchItemByBarcode(barcode) {
+                print("✅ Found cached item for barcode \(barcode): \(cachedItem.name)")
+                // Create new instance with same properties but new ID and dates
+                let newItem = PantryItem(
+                    name: cachedItem.name,
+                    storageLocation: cachedItem.storageLocation,
+                    scanDate: Date(),
+                    currentExpirationDate: Calendar.current.date(
+                        byAdding: .day,
+                        value: cachedItem.daysUntilExpiration,
+                        to: Date()
+                    ) ?? Date(),
+                    shelfLifeEstimates: cachedItem.shelfLifeEstimates,
+                    edamamFoodId: cachedItem.edamamFoodId,
+                    imageURL: cachedItem.imageURL,
+                    category: cachedItem.category,
+                    barcode: barcode,
+                    quantity: "1",
+                    brand: cachedItem.brand,
+                    notes: cachedItem.notes,
+                    sustainabilityNotes: cachedItem.sustainabilityNotes
+                )
+
+                try await supabase.insertItem(newItem)
+
+                await MainActor.run {
+                    items.append(newItem)
+                    isAnalyzing = false
+                    isPresentingScannerSheet = false
+                }
+                return
+            }
+
+            // Barcode not cached, fetch from Edamam API
             let result = try await foodService.analyzeFood(barcode: barcode)
 
             let newItem = PantryItem(
@@ -212,6 +252,7 @@ class PantryViewModel: ObservableObject {
                 edamamFoodId: result.edamamFoodId,
                 imageURL: result.imageURL,
                 category: result.category,
+                barcode: barcode,
                 quantity: "1",
                 brand: result.brand,
                 notes: result.notes,
@@ -227,10 +268,43 @@ class PantryViewModel: ObservableObject {
                 isPresentingScannerSheet = false
             }
         } catch {
-            await MainActor.run {
-                errorMessage = error.localizedDescription
-                isAnalyzing = false
-                print("❌ Error adding item from barcode: \(error.localizedDescription)")
+            // Check if error is "no results" or 404 - if so, open manual entry with barcode pre-filled
+            let shouldOpenManualEntry: Bool
+            if let serviceError = error as? FoodExpirationService.ServiceError {
+                switch serviceError {
+                case .noResults:
+                    shouldOpenManualEntry = true
+                case .apiError(let message) where message.contains("404"):
+                    shouldOpenManualEntry = true
+                default:
+                    shouldOpenManualEntry = false
+                }
+            } else {
+                shouldOpenManualEntry = false
+            }
+
+            if shouldOpenManualEntry {
+                print("⚠️ Barcode \(barcode) not found - opening manual entry")
+                await MainActor.run {
+                    isAnalyzing = false
+                    isPresentingScannerSheet = false
+                    print("📱 Scanner sheet dismissed, setting barcode: \(barcode)")
+                    barcodeForManualEntry = barcode
+                }
+
+                // Longer delay to ensure scanner sheet is fully dismissed
+                try? await Task.sleep(nanoseconds: 600_000_000) // 0.6 seconds
+
+                await MainActor.run {
+                    print("📱 Opening add sheet with barcode: \(barcodeForManualEntry ?? "nil")")
+                    isPresentingAddSheet = true
+                }
+            } else {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    isAnalyzing = false
+                    print("❌ Error adding item from barcode: \(error.localizedDescription)")
+                }
             }
         }
     }
@@ -241,10 +315,10 @@ class PantryViewModel: ObservableObject {
             isAnalyzing = true
             errorMessage = nil
         }
-        
+
         do {
             let result = try await foodService.analyzeFoodFromImage(foodName: foodName)
-            
+
             let newItem = PantryItem(
                 name: result.name,
                 storageLocation: result.recommendedStorage,
@@ -273,6 +347,60 @@ class PantryViewModel: ObservableObject {
                 errorMessage = error.localizedDescription
                 isAnalyzing = false
                 print("❌ Error adding item from image: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Add item from manual entry with AI analysis
+    func addFromManualEntry(name: String, additionalContext: String, barcode: String?, imageURL: String?) async {
+        await MainActor.run {
+            isAnalyzing = true
+            errorMessage = nil
+        }
+
+        do {
+            // Combine name and context for AI analysis
+            let fullDescription = additionalContext.isEmpty ? name : "\(name) - \(additionalContext)"
+
+            let result = try await foodService.analyzeFoodFromImage(foodName: fullDescription)
+
+            // Use provided image or result image, or fetch generic if needed
+            var finalImageURL = imageURL ?? result.imageURL
+            if finalImageURL == nil {
+                // Try to get generic image
+                let genericName = name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+                finalImageURL = await foodService.fetchGenericFoodImage(genericName: genericName)
+            }
+
+            let newItem = PantryItem(
+                name: result.name,
+                storageLocation: result.recommendedStorage,
+                scanDate: Date(),
+                currentExpirationDate: result.expirationDate,
+                shelfLifeEstimates: result.shelfLifeEstimates,
+                edamamFoodId: result.edamamFoodId,
+                imageURL: finalImageURL,
+                category: result.category,
+                barcode: barcode,
+                quantity: "1",
+                brand: result.brand,
+                notes: result.notes,
+                sustainabilityNotes: result.sustainabilityNotes
+            )
+
+            // Save to Supabase
+            try await supabase.insertItem(newItem)
+
+            await MainActor.run {
+                items.append(newItem)
+                isAnalyzing = false
+                isPresentingAddSheet = false
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                isAnalyzing = false
+                print("❌ Error adding item from manual entry: \(error.localizedDescription)")
             }
         }
     }
