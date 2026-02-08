@@ -6,12 +6,57 @@ struct PantryView: View {
     @State private var isEditMode = false
     @State private var showingProfileSheet = false
 
+    private func itemsFor(_ location: StorageLocation) -> [PantryItem] {
+        viewModel.items
+            .filter { $0.storageLocation == location }
+            .sorted { $0.daysUntilExpiration < $1.daysUntilExpiration }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
-                // Cream background
                 Color.appCream.ignoresSafeArea()
 
+                if viewModel.isLoading {
+                    ProgressView("Loading pantry...")
+                } else {
+                    VStack(spacing: 0) {
+                        StorageSectionView(
+                            title: "Pantry",
+                            items: itemsFor(.shelf),
+                            isEditMode: isEditMode,
+                            viewModel: viewModel,
+                            onLongPress: { withAnimation(.spring()) { isEditMode = true } }
+                        )
+                        .frame(maxHeight: .infinity)
+
+                        StorageSectionView(
+                            title: "Fridge",
+                            items: itemsFor(.fridge),
+                            isEditMode: isEditMode,
+                            viewModel: viewModel,
+                            onLongPress: { withAnimation(.spring()) { isEditMode = true } }
+                        )
+                        .frame(maxHeight: .infinity)
+
+                        StorageSectionView(
+                            title: "Freezer",
+                            items: itemsFor(.freezer),
+                            isEditMode: isEditMode,
+                            viewModel: viewModel,
+                            onLongPress: { withAnimation(.spring()) { isEditMode = true } }
+                        )
+                        .frame(maxHeight: .infinity)
+                    }
+                    .padding(.top, 8)
+                    .padding(.bottom, 80)
+                }
+
+                // Floating Done button for edit mode
+                if isEditMode {
+                    VStack {
+                        HStack {
+                            Spacer()
                 VStack(spacing: 0) {
                     // Custom gradient title with profile button and Done button
                     HStack {
@@ -47,58 +92,61 @@ struct PantryView: View {
                                     .foregroundColor(.appPrimaryGreen)
                             }
                         }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
+                        Spacer()
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-                    .padding(.bottom, 12)
+                }
+            }
+            .navigationBarHidden(true)
+            .task {
+                await viewModel.loadItems()
+            }
+        }
+    }
+}
 
-                    if viewModel.isLoading {
-                        // Loading state
-                        Spacer()
-                        ProgressView("Loading pantry...")
-                        Spacer()
-                    } else if viewModel.items.isEmpty {
-                        // Empty state
-                        Spacer()
-                        VStack(spacing: 16) {
-                            Image(systemName: "tray")
-                                .font(.system(size: 64))
-                                .foregroundColor(.appIconGray.opacity(0.5))
+// MARK: - Storage Section View
+private struct StorageSectionView: View {
+    let title: String
+    let items: [PantryItem]
+    let isEditMode: Bool
+    let viewModel: PantryViewModel
+    let onLongPress: () -> Void
 
-                            Text("Pantry is empty")
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.appIconGray)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.system(size: 36, weight: .bold))
+                .foregroundStyle(.linearGradient(
+                    colors: [.appGradientTop, .appGradientBottom],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ))
+                .padding(.horizontal, 20)
 
-                            Text("Tap the + button below to add items")
-                                .font(.subheadline)
-                                .foregroundColor(.appIconGray.opacity(0.7))
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal)
-                        }
-                        Spacer()
-                    } else {
-                        // Items list
-                        ScrollView {
-                            LazyVStack(spacing: 12) {
-                                ForEach(viewModel.items, id: \.id) { item in
-                                    ZStack(alignment: .topLeading) {
-                                        // Card with navigation
-                                        NavigationLink(destination: PantryItemDetailView(item: item, viewModel: viewModel)) {
-                                            PantryItemCard(item: item)
+            if items.isEmpty {
+                Text("\(title) is empty!")
+                    .font(.subheadline)
+                    .foregroundColor(.appIconGray)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(items, id: \.id) { item in
+                            ZStack(alignment: .topLeading) {
+                                NavigationLink(destination: PantryItemDetailView(item: item, viewModel: viewModel)) {
+                                    PantryItemSquareCard(item: item)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .disabled(isEditMode)
+                                .simultaneousGesture(
+                                    LongPressGesture(minimumDuration: 1.0)
+                                        .onEnded { _ in
+                                            onLongPress()
                                         }
-                                        .buttonStyle(PlainButtonStyle())
-                                        .disabled(isEditMode)
-                                        .simultaneousGesture(
-                                            LongPressGesture(minimumDuration: 2.0)
-                                                .onEnded { _ in
-                                                    print("🔴 Long press detected!")
-                                                    withAnimation(.spring()) {
-                                                        isEditMode = true
-                                                    }
-                                                }
-                                        )
+                                )
 
                                         // Delete button overlay when in edit mode
                                         if isEditMode {
@@ -143,14 +191,15 @@ struct PantryView: View {
     }
 }
 
-// MARK: - Pantry Item Card (New Design)
-private struct PantryItemCard: View {
+// MARK: - Pantry Item Square Card
+private struct PantryItemSquareCard: View {
     let item: PantryItem
+    private let cardSize: CGFloat = 150
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                // Thumbnail if available
+            // Image area with expiry badge overlay
+            ZStack(alignment: .topTrailing) {
                 if let imageURL = item.imageURL, let url = URL(string: imageURL) {
                     AsyncImage(url: url) { image in
                         image
@@ -159,58 +208,39 @@ private struct PantryItemCard: View {
                     } placeholder: {
                         Color.gray.opacity(0.2)
                     }
-                    .frame(width: 60, height: 60)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .frame(width: cardSize, height: cardSize - 34)
+                    .clipped()
                 } else {
-                    // Placeholder icon
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.appIconGray.opacity(0.15))
-                        .frame(width: 60, height: 60)
+                    Color.appIconGray.opacity(0.15)
+                        .frame(width: cardSize, height: cardSize - 34)
                         .overlay(
                             Image(systemName: "photo")
-                                .font(.system(size: 24))
+                                .font(.system(size: 28))
                                 .foregroundColor(.appIconGray.opacity(0.5))
                         )
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(item.name)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.black)
-
-                    if let brand = item.brand {
-                        Text(brand)
-                            .font(.system(size: 14))
-                            .foregroundColor(.secondary)
-                    }
-
-                    HStack(spacing: 8) {
-                        Text("\(item.storageLocation.icon) \(item.storageLocation.rawValue.capitalized)")
-                            .font(.system(size: 13))
-                            .foregroundColor(.appIconGray)
-
-                        if !item.isExpired {
-                            Text("• \(item.formattedTimeRemaining)")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(item.urgencyColor)
-                        } else {
-                            Text("• Expired")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(.red)
-                        }
-                    }
-                }
-
-                Spacer()
-
-                // Chevron
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14))
-                    .foregroundColor(.appIconGray.opacity(0.5))
+                // Expiry badge in top right
+                Text(item.isExpired ? "Expired" : item.formattedTimeRemaining)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(item.urgencyColor.opacity(0.9))
+                    .cornerRadius(6)
+                    .padding(6)
             }
-            .padding(16)
 
-            // Progress bar
+            // Food title
+            Text(item.name)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.black)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+
+            // Status bar
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Rectangle()
@@ -224,7 +254,10 @@ private struct PantryItemCard: View {
             }
             .frame(height: 4)
         }
-        .cardStyle()
+        .frame(width: cardSize, height: cardSize)
+        .background(Color.appWhite)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
     }
 }
 
@@ -236,13 +269,13 @@ private struct PantryItemDetailView: View {
 
     @State private var amountRemaining: Double
     @State private var showingDisposalAlert = false
-    @State private var previousAmount: Double
+    @State private var amountBeforeZero: Double
 
     init(item: PantryItem, viewModel: PantryViewModel) {
         self.item = item
         self.viewModel = viewModel
         _amountRemaining = State(initialValue: item.amountRemaining)
-        _previousAmount = State(initialValue: item.amountRemaining)
+        _amountBeforeZero = State(initialValue: item.amountRemaining)
     }
 
     var body: some View {
@@ -254,24 +287,21 @@ private struct PantryItemDetailView: View {
                 VStack(spacing: 20) {
                     // Product image at top
                     if let imageURL = item.imageURL, let url = URL(string: imageURL) {
+
                         AsyncImage(url: url) { phase in
                             if let image = phase.image {
                                 image
                                     .resizable()
-                                    .aspectRatio(contentMode: .fit)
+                                    .scaledToFit()      // keeps original aspect ratio
                             } else {
-                                Rectangle()
-                                    .fill(Color.gray.opacity(0.2))
-                                    .overlay(
-                                        ProgressView()
-                                    )
+                                Color.gray.opacity(0.2)
+                                    .overlay(ProgressView())
                             }
                         }
                         .frame(maxWidth: .infinity)
-                        .frame(height: 250)
-                        .background(Color.clear)
-                        .cornerRadius(16)
-                        .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .clipped()
+                        .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
                         .padding(.horizontal, 16)
                     }
 
@@ -293,29 +323,15 @@ private struct PantryItemDetailView: View {
                             .foregroundColor(.appIconGray)
                     }
 
-                    HStack(spacing: 16) {
-                        VStack {
-                            Text(item.storageLocation.icon)
-                                .font(.title2)
-                            Text(item.storageLocation.displayName)
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .foregroundColor(.appIconGray)
-                        }
-
-                        Divider()
-                            .frame(height: 40)
-
-                        VStack {
-                            Text(item.formattedTimeRemaining)
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                                .foregroundColor(item.urgencyColor)
-                            Text(item.isExpired ? "Expired" : "Remaining")
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .foregroundColor(.appIconGray)
-                        }
+                    VStack {
+                        Text(item.formattedTimeRemaining)
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(item.urgencyColor)
+                        Text(item.isExpired ? "Expired" : "Remaining")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundColor(.appIconGray)
                     }
                     .padding()
                 }
@@ -339,6 +355,7 @@ private struct PantryItemDetailView: View {
 
                             // If slider reaches 0 and was previously above 0, show disposal alert
                             if newValue == 0 && oldValue > 0 {
+                                amountBeforeZero = oldValue  // Capture the value before 0
                                 showingDisposalAlert = true
                             }
                         }
@@ -366,8 +383,9 @@ private struct PantryItemDetailView: View {
 
                 if let sustainabilityNotes = item.sustainabilityNotes, !sustainabilityNotes.isEmpty {
                     HStack(alignment: .top, spacing: 8) {
-                        Text("♻️")
+                        Image(systemName: "leaf.fill")
                             .font(.title3)
+                            .foregroundColor(.appPrimaryGreen)
                         Text(sustainabilityNotes)
                             .font(.body)
                             .fontWeight(.bold)
@@ -397,47 +415,150 @@ private struct PantryItemDetailView: View {
                     ))
             }
         }
-        .alert("How was this item used?", isPresented: $showingDisposalAlert) {
-            Button("Used Fully") {
-                Task {
-                    await MainActor.run {
-                        viewModel.disposeItem(item, method: .usedFully)
+        .overlay {
+            if showingDisposalAlert {
+                // Dimmed background
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        // Cancel on background tap
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            amountRemaining = amountBeforeZero
+                            viewModel.updateItemAmount(item, newAmount: amountBeforeZero)
+                            showingDisposalAlert = false
+                        }
                     }
-                    try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second delay
-                    await MainActor.run {
-                        dismiss()
+
+                // Popup card
+                VStack(spacing: 24) {
+                    // Title
+                    VStack(spacing: 8) {
+                        Text("How was this item used?")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(.linearGradient(
+                                colors: [.appGradientTop, .appGradientBottom],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ))
+
+                        Text("Help us track your sustainability impact")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.appIconGray)
+                    }
+
+                    // Option buttons
+                    VStack(spacing: 12) {
+                        DisposalOptionButton(
+                            title: "Used Fully",
+                            subtitle: "Composted or recycled inedible parts",
+                            icon: "checkmark.circle.fill",
+                            color: .appPrimaryGreen,
+                            isSelected: false
+                        ) {
+                            viewModel.disposeItem(item, method: .usedFully)
+                            showingDisposalAlert = false
+                            dismiss()
+                        }
+
+                        DisposalOptionButton(
+                            title: "Used Partially",
+                            subtitle: "Threw away inedible parts",
+                            icon: "minus.circle.fill",
+                            color: .appDisposalYellow,
+                            isSelected: false
+                        ) {
+                            viewModel.disposeItem(item, method: .usedPartially)
+                            showingDisposalAlert = false
+                            dismiss()
+                        }
+
+                        DisposalOptionButton(
+                            title: "Thrown Away",
+                            subtitle: "Item went bad before use",
+                            icon: "xmark.circle.fill",
+                            color: .appDisposalRed,
+                            isSelected: false
+                        ) {
+                            viewModel.disposeItem(item, method: .thrownAway)
+                            showingDisposalAlert = false
+                            dismiss()
+                        }
+                    }
+
+                    // Cancel button
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            amountRemaining = amountBeforeZero
+                            viewModel.updateItemAmount(item, newAmount: amountBeforeZero)
+                            showingDisposalAlert = false
+                        }
+                    } label: {
+                        Text("Cancel")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.appIconGray)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.appCream)
+                            .cornerRadius(12)
                     }
                 }
+                .padding(24)
+                .background(Color.white)
+                .cornerRadius(20)
+                .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
+                .padding(.horizontal, 24)
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
-            Button("Used Partially") {
-                Task {
-                    await MainActor.run {
-                        viewModel.disposeItem(item, method: .usedPartially)
-                    }
-                    try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second delay
-                    await MainActor.run {
-                        dismiss()
-                    }
+        }
+        .animation(.easeInOut(duration: 0.25), value: showingDisposalAlert)
+    }
+}
+
+// MARK: - Disposal Option Button
+struct DisposalOptionButton: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let color: Color
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 24))
+                    .foregroundColor(.white)
+                    .frame(width: 40, height: 40)
+                    .background(color)
+                    .cornerRadius(10)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.black)
+                    
+                    Text(subtitle)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundColor(.appIconGray)
+                        .lineLimit(2)
+                }
+                
+                Spacer()
+                
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(color)
                 }
             }
-            Button("Thrown Away", role: .destructive) {
-                Task {
-                    await MainActor.run {
-                        viewModel.disposeItem(item, method: .thrownAway)
-                    }
-                    try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second delay
-                    await MainActor.run {
-                        dismiss()
-                    }
-                }
-            }
-            Button("Cancel", role: .cancel) {
-                // Reset slider to previous value
-                amountRemaining = previousAmount
-                viewModel.updateItemAmount(item, newAmount: previousAmount)
-            }
-        } message: {
-            Text("Used Fully: Composted inedible parts (e.g., pepper stem)\nUsed Partially: Threw away inedible parts\nThrown Away: Item went bad before use")
+            .padding(12)
+            .background(Color.appCream.opacity(0.5))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? color : Color.clear, lineWidth: 2)
+            )
         }
     }
 }

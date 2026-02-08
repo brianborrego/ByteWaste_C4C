@@ -31,7 +31,7 @@ struct ContentView: View {
                         ShoppingListView(triggerAdd: $triggerShoppingAdd)
                             .transition(.opacity)
                     } else if selectedTab == .sustainability {
-                        SustainabilityView()
+                        ProgressTreeView()
                             .transition(.opacity)
                     }
                 }
