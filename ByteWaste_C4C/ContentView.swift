@@ -125,10 +125,6 @@ private struct RecipesPlaceholderView: View {
     }
 }
 
-        }
-    }
-}
-
 #Preview {
     ContentView()
 }
